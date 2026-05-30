@@ -1,0 +1,9 @@
+api_id: 22016532
+api_hash: d80389059badf996a79f4a3210d132cd
+phone: "+79165191952"
+projects:
+  - name: gen-panel
+    spec_path: /Users/dmitry/Documents/Droid/airealty
+    chats:
+      - id: 2135877404
+        title: Chat with Den

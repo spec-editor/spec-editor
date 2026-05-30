@@ -1,0 +1,40 @@
+title: Software Requirements Specification
+version: "1.0"
+sections:
+  - title: Introduction
+    number: "1"
+    description: Objectives, scope, definitions (see specification aspects)
+  - title: General Description
+    number: "2"
+    description: "System architecture: modules and their components"
+    aspects:
+      - modules
+    group_by: parent
+  - title: User Scenarios
+    number: "3"
+    description: User goals, detailed scenarios, step-by-step instructions
+    aspects:
+      - user_scenarios
+    group_by: parent
+  - title: Interface Requirements
+    number: "4"
+    description: Interface sections, screens, widgets, controls
+    aspects:
+      - user_interface
+    group_by: parent
+  - title: Data Model
+    number: "5"
+    description: Data entities and their fields
+    aspects:
+      - data_entities
+    group_by: parent
+  - title: Non-Functional Requirements
+    number: "6"
+    description: Performance, security, scalability
+    aspects:
+      - non_functional
+  - title: Requirements Traceability
+    number: A
+    description: Requirements-to-implementation links (code, API, tests)
+    aspects:
+      - implementation

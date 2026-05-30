@@ -1,0 +1,10 @@
+# Spec Editor agent skills
+# Methodology references skills by name
+
+skills:
+  - name: "system_analyst"
+    description: "System analyst — develops and verifies requirements"
+    # prompt left empty — uses SPEC_AGENT_SYSTEM_PROMPT from code
+    prompt: ""
+    # tools left empty — all available tools are used
+    tools: []

@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ title }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Onest:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#f7f4ed;
+    --paper-2:#efe9dd;
+    --ink:#1c1a17;
+    --ink-soft:#3d3a34;
+    --terra:#b5552f;
+    --forest:#2f5d4e;
+    --gold:#b6892f;
+    --navy:#23344d;
+    --plum:#6b3a52;
+    --teal:#2b6b6b;
+    --line:#d8cfbd;
+    --line-soft:#e6ddcd;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Onest',sans-serif;
+    font-weight:400;
+    line-height:1.6;
+    font-size:16px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:0 32px}
+
+  /* Header */
+  header{
+    padding:88px 0 56px;
+    border-bottom:2px solid var(--ink);
+    position:relative;
+    overflow:hidden;
+  }
+  .eyebrow{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    letter-spacing:0.32em;
+    text-transform:uppercase;
+    color:var(--terra);
+    font-weight:500;
+    margin-bottom:24px;
+  }
+  h1{
+    font-family:'Cormorant Garamond',serif;
+    font-weight:600;
+    font-size:72px;
+    line-height:0.98;
+    letter-spacing:-0.01em;
+    color:var(--ink);
+    margin-bottom:20px;
+  }
+  .lede{
+    font-size:19px;
+    color:var(--ink-soft);
+    max-width:620px;
+    font-weight:300;
+  }
+  .meta-row{
+    display:flex;
+    gap:32px;
+    margin-top:36px;
+    flex-wrap:wrap;
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    letter-spacing:0.04em;
+    color:var(--ink-soft);
+  }
+  .meta-row span b{color:var(--ink);font-weight:600}
+
+  /* Nav */
+  nav{
+    position:sticky;top:0;z-index:10;
+    background:rgba(247,244,237,0.92);
+    backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--line);
+    padding:16px 0;
+  }
+  nav .wrap{display:flex;gap:28px;flex-wrap:wrap;align-items:center}
+  nav a{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    text-decoration:none;
+    padding-bottom:2px;
+    border-bottom:1.5px solid transparent;
+    transition:color .2s,border-color .2s;
+  }
+  nav a:hover{color:var(--terra);border-color:var(--terra)}
+
+  /* Sections */
+  section{padding:64px 0;border-bottom:1px solid var(--line-soft)}
+  section:last-child{border-bottom:none}
+  .sec-head{display:flex;align-items:baseline;gap:18px;margin-bottom:8px}
+  .sec-num{
+    font-family:'JetBrains Mono',monospace;
+    font-size:13px;
+    color:var(--terra);
+    font-weight:600;
+  }
+  h2{
+    font-family:'Cormorant Garamond',serif;
+    font-weight:600;
+    font-size:42px;
+    line-height:1.05;
+    letter-spacing:-0.01em;
+  }
+  .sec-sub{color:var(--ink-soft);font-weight:300;margin:14px 0 36px;max-width:680px;font-size:17px}
+
+  /* Requirements */
+  .req-group{margin-bottom:40px}
+  .req-group h3{
+    font-family:'Cormorant Garamond',serif;
+    font-weight:600;
+    font-size:27px;
+    margin-bottom:16px;
+    color:var(--navy);
+    border-bottom:1px solid var(--line);
+    padding-bottom:8px;
+  }
+  .req-card{
+    border:1px solid var(--line);
+    border-left:3px solid var(--forest);
+    background:var(--paper-2);
+    padding:20px 24px;
+    border-radius:2px;
+    margin-bottom:12px;
+  }
+  .req-card.implementation{border-left-color:var(--teal)}
+  .req-card.non_functional{border-left-color:var(--plum)}
+  .req-card.user_interface{border-left-color:var(--navy)}
+  .req-card.user_scenarios{border-left-color:var(--terra)}
+  .req-card.data_entities{border-left-color:var(--gold)}
+
+  .req-head{
+    display:flex;
+    align-items:baseline;
+    gap:12px;
+    margin-bottom:10px;
+    flex-wrap:wrap;
+  }
+  .req-id{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    font-weight:600;
+    color:var(--ink-soft);
+    letter-spacing:0.04em;
+  }
+  .req-title{
+    font-family:'Cormorant Garamond',serif;
+    font-size:21px;
+    font-weight:600;
+    color:var(--ink);
+  }
+  .req-badge{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    padding:3px 10px;
+    border-radius:2px;
+    font-weight:500;
+  }
+  .badge-draft{background:var(--line);color:var(--ink-soft)}
+  .badge-reviewed{background:var(--forest);color:#fff}
+  .badge-confirmed{background:var(--navy);color:#fff}
+
+  .req-content{
+    font-size:15px;
+    color:var(--ink-soft);
+    line-height:1.7;
+    white-space:pre-wrap;
+  }
+  .req-content p{margin-bottom:8px}
+  .req-content strong{color:var(--ink);font-weight:600}
+  .req-content ul, .req-content ol{padding-left:20px;margin-bottom:8px}
+  .req-content li{margin-bottom:4px}
+  .req-content code,.mono{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+    color:var(--navy);
+    font-weight:500;
+    background:var(--paper);
+    padding:1px 5px;
+    border-radius:2px;
+  }
+
+  /* Relations chip */
+  .relations{
+    display:flex;
+    gap:6px;
+    flex-wrap:wrap;
+    margin-top:10px;
+  }
+  .rel-chip{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;
+    letter-spacing:0.04em;
+    padding:3px 8px;
+    border-radius:2px;
+    border:1px solid var(--line);
+    color:var(--ink-soft);
+  }
+
+  /* Footer */
+  footer{
+    padding:56px 0;
+    color:var(--ink-soft);
+    font-size:13px;
+    font-family:'JetBrains Mono',monospace;
+    border-top:2px solid var(--ink);
+    margin-top:40px;
+  }
+
+  /* Empty state */
+  .empty-state{
+    padding:32px;
+    text-align:center;
+    color:var(--ink-soft);
+    font-style:italic;
+    border:1px dashed var(--line);
+    border-radius:2px;
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'neutral'});</script>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Software Requirements Specification</div>
+  <h1>{{ title }}</h1>
+  <p class="lede">Software requirements specification document, generated by Spec Editor</p>
+  {% set total_elements = namespace(val=0) %}
+  {% for section in sections %}
+    {% set total_elements.val = total_elements.val + section.elements|length %}
+  {% endfor %}
+  <div class="meta-row">
+    <span>Sections: <b>{{ sections|length }}</b></span>
+    <span>Elements: <b>{{ total_elements.val }}</b></span>
+    <span>Generated: <b>Spec Editor</b></span>
+  </div>
+</header>
+
+<!-- TOC -->
+<section style="padding:40px 0 48px;border-bottom:1px solid var(--line-soft)">
+  <div class="sec-head">
+    <span class="sec-num"></span>
+    <h2>Contents</h2>
+  </div>
+  <ol style="list-style:none;padding:0">
+  {% for section in sections %}
+    <li style="margin-bottom:10px;font-size:17px">
+      <span class="mono" style="color:var(--terra);font-weight:600;margin-right:12px">{{ section.number }}</span>
+      <a href="#sec-{{ section.number|replace('.','-') }}" style="color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line)">{{ section.title }}</a>
+    </li>
+  {% endfor %}
+  </ol>
+</section>
+
+<nav>
+  <div class="wrap">
+    {% for section in sections %}
+    <span class="mono" style="color:var(--terra);font-weight:600;margin-right:12px">{{ section.number }}</span>
+      <a href="#sec-{{ section.number|replace('.','-') }}">{{ section.number }}. {{ section.title }}</a>
+    {% endfor %}
+  </div>
+</nav>
+
+{% for section in sections %}
+<section id="sec-{{ section.number|replace('.','-') }}">
+  <div class="sec-head">
+    <span class="sec-num">{{ section.number }}</span>
+    <h2>{{ section.title }}</h2>
+  </div>
+  {% if section.description %}
+  <p class="sec-sub">{{ section.description }}</p>
+  {% endif %}
+  {% if section.diagram %}
+  <div class="mermaid" style="background:var(--paper-2);padding:20px;border-radius:2px;margin:20px 0;border:1px solid var(--line)">
+{{ section.diagram }}
+  </div>
+  {% endif %}
+
+  {% set current_group = namespace(key='') %}
+  {% for elem in section.elements %}
+    {% set group = elem.group_key if elem.group_key else '' %}
+    {% if group and group != current_group.key %}
+      {% set current_group.key = group %}
+      <div class="req-group">
+      <h3>{{ group }}</h3>
+    {% elif not group and current_group.key != '__nogroup__' %}
+      {% set current_group.key = '__nogroup__' %}
+      </div><div class="req-group">
+    {% endif %}
+
+    <div class="req-card {{ elem.aspect }}" id="{{ elem.id }}">
+      <div class="req-head">
+        <span class="req-id">{{ elem.id }}</span>
+        <span class="req-title">{{ elem.title }}</span>
+        <span class="req-badge badge-{{ elem.status }}">{{ elem.status }}</span>
+        <span class="req-badge" style="background:var(--paper);border:1px solid var(--line);color:var(--ink-soft)">{{ elem.type }}</span>
+      </div>
+      {% if elem.content %}
+      <div class="req-content">{{ elem.content|markdown|safe }}</div>
+      {% endif %}
+      {% if elem.inline_steps %}
+      <div style="margin-top:12px;padding:12px 16px;background:var(--paper);border-radius:2px;border:1px solid var(--line-soft)">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--terra);margin-bottom:8px;letter-spacing:0.06em">↳ USAGE SCENARIOS</div>
+        {% for step in elem.inline_steps %}
+        <div style="margin-bottom:8px;padding-left:12px;border-left:2px solid var(--line)">
+          <a href="#{{ step.id }}" style="font-weight:600;color:var(--navy);font-size:14px">{{ step.id }}</a>
+          <span style="color:var(--ink);font-size:14px">«{{ step.title }}»</span>
+          {% if step.content %}
+          <div style="font-size:13px;color:var(--ink-soft);margin-top:3px;white-space:pre-wrap">{{ step.content }}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if elem.relationships %}
+      <div class="relations">
+      {% for rel_type, entries in elem.relationships.items() %}
+        {% for entry in entries %}
+        <span class="rel-chip">{{ rel_type }} → <a href="#{{ entry.target }}" style="color:var(--navy)">{{ entry.target }}</a></span>
+        {% endfor %}
+      {% endfor %}
+      </div>
+      {% endif %}
+      {% if elem.back_refs %}
+      <div class="relations" style="margin-top:4px">
+      {% for rel_type, sources in elem.back_refs.items() %}
+        <span class="rel-chip" style="border-color:var(--terra);color:var(--terra);white-space:normal;max-width:100%">← {{ rel_type }}: {% for src in sources %}<a href="#{{ src.id }}">{{ src.id }}</a> <small style="color:var(--ink-soft)">{{ src.title }}</small>{% if not loop.last %}; {% endif %}{% endfor %}</span>
+      {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  {% endfor %}
+  </div>
+</section>
+{% endfor %}
+
+<footer>
+  <div class="wrap">Spec Editor — AI-powered requirements engineering</div>
+</footer>
+
+</div>
+</body>
+</html>

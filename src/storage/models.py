@@ -1,0 +1,100 @@
+"""Pydantic data models: elements, relationships, aspects."""
+
+from enum import Enum
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+
+class ElementStatus(str, Enum):
+    """Requirements element lifecycle status."""
+
+    DRAFT = "draft"
+    REVIEWED = "reviewed"
+    CONFIRMED = "confirmed"
+    DEPRECATED = "deprecated"
+
+
+class RelationshipEntry(BaseModel):
+    """Element relationship record: role + target element ID."""
+
+    role: str = Field(description="Role in the relationship (parent, child, or custom)")
+    target: str = Field(description="Target element ID")
+
+
+class Provenance(BaseModel):
+    """Requirement provenance source."""
+
+    source: str = Field(
+        description="Where the requirement came from (document, section, ...)"
+    )
+    confidence: float = Field(
+        default=1.0, ge=0.0, le=1.0, description="Confidence in the requirement (0..1)"
+    )
+
+
+class Element(BaseModel):
+    """Full requirements element model.
+
+    Corresponds to a single .md file with YAML frontmatter.
+    """
+
+    aspect: str = Field(description="Name of the aspect to which the element belongs")
+    element_type: str = Field(description="Element type according to the methodology")
+    id: str = Field(description="Unique identifier within the project")
+    title: str = Field(description="Human-readable element name")
+    status: ElementStatus = Field(
+        default=ElementStatus.DRAFT, description="Lifecycle status"
+    )
+    parent: str | None = Field(
+        default=None, description="Parent element ID (decomposition)"
+    )
+    children: list[str] = Field(
+        default_factory=list, description="Child element IDs (decomposition)"
+    )
+    relationships: dict[str, list[RelationshipEntry]] = Field(
+        default_factory=dict,
+        description="Typed relationships: {relationship_type: [RelationshipEntry, ...]}",
+    )
+    tags: list[str] = Field(
+        default_factory=list, description="Tags for search and categorization"
+    )
+    provenance: Provenance | None = Field(
+        default=None, description="Source of the requirement's origin"
+    )
+    derived_from: list[str] = Field(
+        default_factory=list,
+        description="IDs of elements from which this one is derived",
+    )
+    covered_by: list[str] = Field(
+        default_factory=list, description="IDs of elements that cover this one"
+    )
+    content: str = Field(
+        default="",
+        description="Markdown body of the element (without YAML frontmatter)",
+    )
+
+
+class ElementSummary(BaseModel):
+    """Lightweight version of an element for lists (without content)."""
+
+    aspect: str
+    element_type: str
+    id: str
+    title: str
+    status: ElementStatus = ElementStatus.DRAFT
+    parent: str | None = None
+    tags: list[str] = Field(default_factory=list)
+
+
+def element_to_summary(element: Element) -> ElementSummary:
+    """Create an ElementSummary from a full Element."""
+    return ElementSummary(
+        aspect=element.aspect,
+        element_type=element.element_type,
+        id=element.id,
+        title=element.title,
+        status=element.status,
+        parent=element.parent,
+        tags=element.tags,
+    )
