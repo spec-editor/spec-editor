@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual env
+.venv/
+venv/
+
+# Environment
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project
+*.log
+dialogue.log
+dialogue.jsonl
+
+# Generated aspect folders (защита от случайного запуска без -p)
+user_interface/
+user_scenarios/
+modules/
+data_entities/
+non_functional/
+aspects/
+source/
+methodology.yaml
+agents.yaml
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Internal docs
+Development/
+Product/
+spec-editor-session.*
+new_features.txt
+deploy.yaml
+
+# Paid content (keep out of OSS)
+paid-methodologies/
+
+# Session artifacts
+dialogue.jsonl
+
+# Source raw - keep dir, exclude contents
+source_raw/*
+!source_raw/.gitkeep

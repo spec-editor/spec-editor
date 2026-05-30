@@ -1,0 +1,44 @@
+# Sprint Report: {{ sprint_name }}
+
+**Period:** {{ start_date }} → {{ end_date }}
+**Goal:** {{ sprint_goal }}
+
+---
+
+## Summary
+
+| Metric | Planned | Actual |
+|--------|---------|--------|
+| Story Points committed | {{ committed_sp }} | {{ completed_sp }} |
+| Stories planned | {{ planned_count }} | {{ completed_count }} |
+| Focus factor | {{ focus_factor }} | — |
+| Velocity | — | {{ completed_sp }} SP |
+
+---
+
+## Completed Stories
+
+{% for story in completed_stories %}
+- ✅ {{ story.id }} {{ story.title }} ({{ story.story_points }} SP)
+{% endfor %}
+
+---
+
+## Incomplete / Carry-Over
+
+{% for story in incomplete_stories %}
+- ⏳ {{ story.id }} {{ story.title }} ({{ story.story_points }} SP) — {{ story.status }}
+{% endfor %}
+
+---
+
+## Retrospective Notes
+
+*What went well:*
+-
+
+*What could be improved:*
+-
+
+*Action items:*
+-
