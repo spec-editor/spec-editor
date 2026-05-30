@@ -38,6 +38,8 @@ class VotingStrategy(str, Enum):
     MAJORITY = "majority"  # pick the most common answer
     WEIGHTED = "weighted"  # weighted by agent confidence/role
     DEBATE = "debate"  # blind → open debate → blind again
+    DISNEY = "disney"  # Dreamer → Realist → Critic phases
+    SIX_HATS = "six_hats"  # Facts → Emotions → Risks → Benefits → Ideas → Process
 
 
 @dataclass
@@ -267,11 +269,16 @@ class BlindVoter:
         agents: list[Any],
         task: str,
     ) -> BlindVotingResult:
-        """Run blind voting rounds until consensus is reached or max rounds.
+        """Run blind voting rounds until consensus is reached or max rounds."""
+        if self.strategy in (VotingStrategy.DISNEY, VotingStrategy.SIX_HATS):
+            return await self._run_multi_phase(agents, task)
 
-        Between rounds, agents are shown the previous round's comparison
-        so they can converge without seeing individual messages.
-        """
+        return await self._run_consensus_rounds(agents, task)
+
+    async def _run_consensus_rounds(
+        self, agents: list[Any], task: str
+    ) -> BlindVotingResult:
+        """Run repeated blind rounds until consensus."""
         current_task = task
 
         for i in range(self._max_rounds):
@@ -287,6 +294,58 @@ class BlindVoter:
                 f"{br.comparison}\n\n"
                 f"Try to converge. Focus on shared concepts."
             )
+
+        return self.build_final_result()
+
+    async def _run_multi_phase(self, agents: list[Any], task: str) -> BlindVotingResult:
+        """Multi-phase strategies: DISNEY (Dreamer→Realist→Critic) and SIX_HATS."""
+        if self.strategy == VotingStrategy.DISNEY:
+            phases = [
+                (
+                    "Dreamer",
+                    "Brainstorm freely. No constraints, no criticism. What COULD we do? Be creative and ambitious.",
+                ),
+                (
+                    "Realist",
+                    "Evaluate feasibility. How WOULD we build this? What resources, time, and skills are needed? Be practical.",
+                ),
+                (
+                    "Critic",
+                    "Find problems and risks. What could go wrong? What are the weaknesses? What edge cases are we missing? Be skeptical.",
+                ),
+            ]
+        else:  # SIX_HATS
+            phases = [
+                (
+                    "White Hat",
+                    "Facts and data only. What do we KNOW? What metrics, numbers, evidence do we have? No opinions.",
+                ),
+                (
+                    "Red Hat",
+                    "Emotions and intuition. What does your gut say? How do users FEEL about this? No need to justify.",
+                ),
+                (
+                    "Black Hat",
+                    "Risks and problems. What could fail? What are the security, cost, and timeline risks? Be the devil's advocate.",
+                ),
+                (
+                    "Yellow Hat",
+                    "Benefits and opportunities. What's the upside? Why is this a GOOD idea? Focus on value and positive outcomes.",
+                ),
+                (
+                    "Green Hat",
+                    "Creative ideas. What alternatives exist? Any unconventional solutions? Think laterally — break the rules.",
+                ),
+                (
+                    "Blue Hat",
+                    "Process and summary. Synthesise all hats. What's the overall recommendation? Summarise the key insights.",
+                ),
+            ]
+
+        for phase_name, phase_prompt in phases:
+            phase_task = f"{task}\n\n[HAT: {phase_name}] {phase_prompt}"
+            br = await self.run_blind_round(agents, phase_task)
+            br.verdict = f"{phase_name}: {br.consensus_score:.0%} consensus"
 
         return self.build_final_result()
 
