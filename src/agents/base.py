@@ -239,7 +239,7 @@ class BaseAgent:
                 )
                 return LLMResponse(
                     content=(
-                        f"Я   — agent limit reached, "
+                        f"AGENT_LIMIT_REACHED — max calls exceeded, "
                         f"connectivity 0.88,  0, agent limit reached. "
                         f"agent limit reached. agent limit reached."
                     ),

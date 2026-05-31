@@ -92,9 +92,9 @@ class LiteLLMProvider(LLMProvider):
                     await asyncio.sleep(wait)
 
         raise RuntimeError(
-            f"LiteLLM: «TRANSLATED» «TRANSLATED» «TRANSLATED» «TRANSLATED» «TRANSLATED» {self._model} "
-            f"«TRANSLATED» {self._max_retries} «TRANSLATED». "
-            f"«TRANSLATED» «TRANSLATED»: {last_error}"
+            f"LiteLLM: all retry attempts exhausted for model {self._model} "
+            f"after {self._max_retries} attempts. "
+            f"Last error: {last_error}"
         )
 
     def supports_tools(self) -> bool:

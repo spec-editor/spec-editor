@@ -33,10 +33,26 @@ cli = commands_cli
 )
 @click.option("--max-rounds", "-r", default=None, type=int, help="Round limit")
 @click.option("--task", "-t", default=None, help="Task for agents")
+@click.option("--verbose", "-v", is_flag=True, help="Verbose log (tool_calls, debug)")
 @click.option(
-    "--verbose", "-v", is_flag=True, help="Verbose log (tool_calls, debug)"
+    "--dry-run",
+    is_flag=True,
+    help="Run agents without writing to the real project",
 )
-def run(path: str, max_rounds: int | None, task: str | None, verbose: bool) -> None:
+@click.option(
+    "--output-dir",
+    default=None,
+    type=click.Path(),
+    help="Directory for dry-run output (default: <project>/.dry_run)",
+)
+def run(
+    path: str,
+    max_rounds: int | None,
+    task: str | None,
+    verbose: bool,
+    dry_run: bool,
+    output_dir: str | None,
+) -> None:
     """Launch an agent dialogue to refine requirements."""
     project_path = Path(path).resolve()
     method_path = project_path / "methodology.yaml"
@@ -75,16 +91,23 @@ def run(path: str, max_rounds: int | None, task: str | None, verbose: bool) -> N
         raise SystemExit(1)
 
     method = load_methodology(method_path)
-    storage = FilesystemStorage(project_path)
+
+    if dry_run:
+        dry_output = Path(output_dir) if output_dir else project_path / ".dry_run"
+        dry_output.mkdir(parents=True, exist_ok=True)
+        from src.storage.dry_run import DryRunStorage
+
+        storage = DryRunStorage(project_path, dry_output)
+        console.print(f"[yellow]Dry-run mode:[/yellow] writing to {dry_output}")
+    else:
+        storage = FilesystemStorage(project_path)
 
     agents_config = AgentsConfig()
     if agents_path.exists():
         try:
             agents_config = AgentsConfig.from_yaml(agents_path)
         except Exception as exc:
-            console.print(
-                f"[yellow]Warning:[/yellow] {exc}. Using defaults."
-            )
+            console.print(f"[yellow]Warning:[/yellow] {exc}. Using defaults.")
 
     # Override from .env if set
     settings = Settings()

@@ -29,6 +29,66 @@ spec_agent: |
   4. Vérifiez la profondeur: chaque élément a du contenu.
   SEULEMENT quand les 4 étapes sont passées — appelez report_complete.
 
+  Examples — follow these patterns exactly
+
+    For EVERY aspect in the methodology, you MUST create elements matching
+    the patterns below. Each example shows the CORRECT format: ID prefix,
+    aspect, element_type, title, description, and relationships.
+
+    ### Example 1: Module (prefix: MOD-)
+
+    SRC says: "The system needs user authentication with login and registration."
+
+    CORRECT output:
+    - write_element: id="MOD-001", aspect="modules", element_type="module"
+    - title: "User Authentication" (specific, not "Auth" or "Module")
+    - content: "Handles user registration, login via email/password, session management."
+    - relates_to: ["MOD-003"]
+    - derived_from: ["SRC-001"]
+
+    ### Example 2: Entity / Data Model (prefix: ENT-)
+
+    CORRECT output:
+    - write_element: id="ENT-001", aspect="data_entities", element_type="entity"
+    - title: "User" (use singular noun)
+    - content: "Core user entity. Attributes: id (UUID), name, email, password_hash, role. GDPR: supports data export."
+    - relates_to: ["ENT-003", "MOD-001"]
+
+    ### Example 3: User Scenario / Flow (prefix: SCN-)
+
+    CORRECT output:
+    - write_element: id="SCN-001", aspect="user_scenarios", element_type="high_level_scenario"
+    - title: "Customer browses and searches book catalog"
+    - content: "1. Customer lands on homepage. 2. Browses categories. 3. Applies filters. 4. Views book details. 5. Adds to cart."
+    - relates_to: ["MOD-001", "MOD-002", "ENT-001"]
+
+    ### Example 4: Non-Functional Requirement (prefix: NFR-)
+
+    CORRECT output:
+    - write_element: id="NFR-001", aspect="non_functional", element_type="requirement"
+    - title: "Page Load Performance < 2 seconds"
+    - content: "THE SYSTEM SHALL serve all pages within 2 seconds at p95."
+    - relates_to: ["MOD-001"]
+
+    ### Example 5: Architecture Decision (prefix: ADR-)
+
+    CORRECT output:
+    - write_element: id="ADR-001", aspect="decisions", element_type="decision"
+    - title: "JWT-based authentication for API"
+    - content: "Decision: Use JWT for API authentication. Rationale: Stateless, works across microservices."
+    - relates_to: ["MOD-001", "NFR-003"]
+
+    ### What NOT to do
+
+    ❌ Create elements with generic titles like "Module 1".
+    ❌ Skip relationships — EVERY element must have at least one relates_to.
+    ❌ Write descriptions shorter than 2 sentences.
+    ❌ Read 50 elements without creating anything — this is LOOPING.
+    ❌ Call report_complete before running validate AND metrics.
+
+
+
+  
 orchestrator: |
   Vous êtes modérateur du dialogue entre deux agents analystes.
 

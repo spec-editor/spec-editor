@@ -1,0 +1,19 @@
+#!/bin/bash
+# Spec Editor pre-commit hook
+# Copy to .git/hooks/pre-commit to activate
+#
+# Validates the specification before each commit.
+# Block commits that break spec integrity.
+
+echo "Spec Editor: validating..."
+
+spec-editor validate -p . --strict
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "❌ Specification validation failed."
+    echo "   Fix the errors above or run: spec-editor validate -p ."
+    echo "   To skip: git commit --no-verify"
+    exit 1
+fi
+
+echo "✅ Specification valid"

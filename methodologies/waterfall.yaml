@@ -1,375 +1,364 @@
 name: waterfall
-version: "1.0"
-description:
-  "Classical waterfall requirements development methodology. Includes five
-  aspects: modules, scenarios, interface, data, and non-functional requirements.
-  Two types of structural relationships: consists_of (ER composition) and refines
-  (refinement/detailing).
+version: '1.0'
+description: 'Classical waterfall requirements development methodology. Includes five
+  aspects: modules, scenarios, interface, data, and non-functional requirements. Two
+  types of structural relationships: consists_of (ER composition) and refines (refinement/detailing).
 
-  "
+  '
 aspects:
-  - name: modules
-    title: Software System Modules
-    description:
-      "Architectural decomposition of the system into modules and components.
-      A module consists of components (consists_of). Modules can depend on each other
-      (depends_on).
+- name: modules
+  title: Software System Modules
+  description: 'Architectural decomposition of the system into modules and components.
+    A module consists of components (consists_of). Modules can depend on each other
+    (depends_on).
 
-      "
-    element_types:
-      - name: module
-        title: Software Module
-        attributes:
-          - name: responsibility
-            type: string
-            title: Module responsibility area
-          - name: technology
-            type: string
-            title: Technology stack
-      - name: component
-        title: Module Component
-        attributes:
-          - name: interface
-            type: string
-            title: Component public interface
-    relationship_types:
-      - name: consists_of
-        title: Module consists of components
-        source_aspects:
-          - modules
-        target_aspects:
-          - modules
-        cardinality: 1-to-many
-      - name: depends_on
-        title: Dependency between modules
-        source_aspects:
-          - modules
-        target_aspects:
-          - modules
-        cardinality: many-to-many
-  - name: user_scenarios
-    title: User Scenarios
-    description:
-      "Scenario hierarchy: user goals/objectives at the top level, detailed
-      scenarios with specific steps (clicks, data input) at the bottom. Refinement
-      chain: high_level_scenario → refines → detailed_scenario → refines → step. Steps
-      are linked sequentially (next_step) and with UI elements (interacts_with).
+    '
+  element_types:
+  - name: module
+    title: Software Module
+    attributes:
+    - name: responsibility
+      type: string
+      title: Module responsibility area
+    - name: technology
+      type: string
+      title: Technology stack
+  - name: component
+    title: Module Component
+    attributes:
+    - name: interface
+      type: string
+      title: Component public interface
+  relationship_types:
+  - name: consists_of
+    title: Module consists of components
+    source_aspects:
+    - modules
+    target_aspects:
+    - modules
+    cardinality: 1-to-many
+  - name: depends_on
+    title: Dependency between modules
+    source_aspects:
+    - modules
+    target_aspects:
+    - modules
+    cardinality: many-to-many
+- name: user_scenarios
+  title: User Scenarios
+  description: 'Scenario hierarchy: user goals/objectives at the top level, detailed
+    scenarios with specific steps (clicks, data input) at the bottom. Refinement chain:
+    high_level_scenario → refines → detailed_scenario → refines → step. Steps are
+    linked sequentially (next_step) and with UI elements (interacts_with).
 
-      "
-    element_types:
-      - name: high_level_scenario
-        title: High-Level Scenario (User Goal)
-        attributes:
-          - name: actor
-            type: string
-            title: User role
-          - name: goal
-            type: string
-            title: Scenario goal
-          - name: preconditions
-            type: string
-            title: Preconditions
-          - name: postconditions
-            type: string
-            title: Postconditions
-      - name: detailed_scenario
-        title: Detailed Scenario
-        attributes:
-          - name: actor
-            type: string
-            title: User role
-      - name: step
-        title: Scenario Step
-        attributes:
-          - name: action
-            type: string
-            title: User action
-          - name: expected_result
-            type: string
-            title: Expected result
-    relationship_types:
-      - name: refines
-        title: Scenario refinement (goal → detailed → step)
-        source_aspects:
-          - user_scenarios
-        target_aspects:
-          - user_scenarios
-        cardinality: 1-to-many
-      - name: next_step
-        title: Next step
-        source_aspects:
-          - user_scenarios
-        target_aspects:
-          - user_scenarios
-        cardinality: 1-to-1
-      - name: interacts_with
-        title: Interacts with UI element
-        source_aspects:
-          - user_scenarios
-        target_aspects:
-          - user_interface
-        cardinality: many-to-many
-  - name: user_interface
-    title: User Interface
-    description:
-      "Interface composition: Section consists of screens, screen consists
-      of widgets, widget consists of controls (consists_of). Screens can reference
-      each other during navigation (navigates_to).
+    '
+  element_types:
+  - name: high_level_scenario
+    title: High-Level Scenario (User Goal)
+    attributes:
+    - name: actor
+      type: string
+      title: User role
+    - name: goal
+      type: string
+      title: Scenario goal
+    - name: preconditions
+      type: string
+      title: Preconditions
+    - name: postconditions
+      type: string
+      title: Postconditions
+  - name: detailed_scenario
+    title: Detailed Scenario
+    attributes:
+    - name: actor
+      type: string
+      title: User role
+  - name: step
+    title: Scenario Step
+    attributes:
+    - name: action
+      type: string
+      title: User action
+    - name: expected_result
+      type: string
+      title: Expected result
+  relationship_types:
+  - name: refines
+    title: Scenario refinement (goal → detailed → step)
+    source_aspects:
+    - user_scenarios
+    target_aspects:
+    - user_scenarios
+    cardinality: 1-to-many
+  - name: next_step
+    title: Next step
+    source_aspects:
+    - user_scenarios
+    target_aspects:
+    - user_scenarios
+    cardinality: 1-to-1
+  - name: interacts_with
+    title: Interacts with UI element
+    source_aspects:
+    - user_scenarios
+    target_aspects:
+    - user_interface
+    cardinality: many-to-many
+- name: user_interface
+  title: User Interface
+  description: 'Interface composition: Section consists of screens, screen consists
+    of widgets, widget consists of controls (consists_of). Screens can reference each
+    other during navigation (navigates_to).
 
-      "
-    element_types:
-      - name: section
-        title: Interface Section
-        attributes:
-          - name: access_roles
-            type: string
-            title: Roles with access to the section
-      - name: screen
-        title: Screen
-        attributes:
-          - name: route
-            type: string
-            title: URL/path to screen
-      - name: widget
-        title: Widget
-        attributes:
-          - name: data_source
-            type: string
-            title: Widget data source
-      - name: control
-        title: Control
-        attributes:
-          - name: control_type
-            type: string
-            title: Control type (button, input, dropdown, ...)
-          - name: label
-            type: string
-            title: Element text/label
-          - name: validation
-            type: string
-            title: Validation rules
-    relationship_types:
-      - name: consists_of
-        title: Interface composition (section → screen → widget → control)
-        source_aspects:
-          - user_interface
-        target_aspects:
-          - user_interface
-        cardinality: 1-to-many
-      - name: navigates_to
-        title: Navigation between screens
-        source_aspects:
-          - user_interface
-        target_aspects:
-          - user_interface
-        cardinality: many-to-many
-  - name: data_entities
-    title: Data Entities
-    description:
-      "Domain model: an entity consists of fields (consists_of). Entities
-      can reference each other (references).
+    '
+  element_types:
+  - name: section
+    title: Interface Section
+    attributes:
+    - name: access_roles
+      type: string
+      title: Roles with access to the section
+  - name: screen
+    title: Screen
+    attributes:
+    - name: route
+      type: string
+      title: URL/path to screen
+  - name: widget
+    title: Widget
+    attributes:
+    - name: data_source
+      type: string
+      title: Widget data source
+  - name: control
+    title: Control
+    attributes:
+    - name: control_type
+      type: string
+      title: Control type (button, input, dropdown, ...)
+    - name: label
+      type: string
+      title: Element text/label
+    - name: validation
+      type: string
+      title: Validation rules
+  relationship_types:
+  - name: consists_of
+    title: Interface composition (section → screen → widget → control)
+    source_aspects:
+    - user_interface
+    target_aspects:
+    - user_interface
+    cardinality: 1-to-many
+  - name: navigates_to
+    title: Navigation between screens
+    source_aspects:
+    - user_interface
+    target_aspects:
+    - user_interface
+    cardinality: many-to-many
+- name: data_entities
+  title: Data Entities
+  description: 'Domain model: an entity consists of fields (consists_of). Entities
+    can reference each other (references).
 
-      "
-    element_types:
-      - name: entity
-        title: Data Entity
-        attributes:
-          - name: table_name
-            type: string
-            title: Database table name
-      - name: field
-        title: Entity Field
-        attributes:
-          - name: data_type
-            type: string
-            title: Field data type
-          - name: required
-            type: boolean
-            title: Required field
-          - name: unique
-            type: boolean
-            title: Unique value
-    relationship_types:
-      - name: consists_of
-        title: Entity consists of fields
-        source_aspects:
-          - data_entities
-        target_aspects:
-          - data_entities
-        cardinality: 1-to-many
-      - name: references
-        title: Reference to another entity
-        source_aspects:
-          - data_entities
-        target_aspects:
-          - data_entities
-        cardinality: many-to-many
-  - name: non_functional
-    title: Non-Functional Requirements
-    description:
-      "Non-functional requirements (performance, security, scalability)
-      applied to modules and interface elements via the applies_to relationship.
+    '
+  element_types:
+  - name: entity
+    title: Data Entity
+    attributes:
+    - name: table_name
+      type: string
+      title: Database table name
+  - name: field
+    title: Entity Field
+    attributes:
+    - name: data_type
+      type: string
+      title: Field data type
+    - name: required
+      type: boolean
+      title: Required field
+    - name: unique
+      type: boolean
+      title: Unique value
+  relationship_types:
+  - name: consists_of
+    title: Entity consists of fields
+    source_aspects:
+    - data_entities
+    target_aspects:
+    - data_entities
+    cardinality: 1-to-many
+  - name: references
+    title: Reference to another entity
+    source_aspects:
+    - data_entities
+    target_aspects:
+    - data_entities
+    cardinality: many-to-many
+- name: non_functional
+  title: Non-Functional Requirements
+  description: 'Non-functional requirements (performance, security, scalability) applied
+    to modules and interface elements via the applies_to relationship.
 
-      "
-    element_types:
-      - name: requirement
-        title: Non-Functional Requirement
-        attributes:
-          - name: category
-            type: string
-            title: Category (performance, security, scalability, ...)
-          - name: metric
-            type: string
-            title: Measurable metric
-          - name: target_value
-            type: string
-            title: Target value
-    relationship_types:
-      - name: applies_to
-        title: Applies to
-        source_aspects:
-          - non_functional
-        target_aspects:
-          - modules
-          - user_interface
-        cardinality: many-to-many
-  - name: implementation
-    title: Implementation (Code)
-    description:
-      "Requirements-to-code traceability: code artifacts, API endpoints,
-      tests. Code implements requirements (implements). Tests verify requirements
-      (tested_by)."
-    element_types:
-      - name: code_artifact
-        title: Code Artifact (class, function, module)
-        attributes:
-          - name: file_path
-            type: string
-            title: File path
-          - name: language
-            type: string
-            title: Programming language
-      - name: api_endpoint
-        title: API Endpoint
-        attributes:
-          - name: method
-            type: string
-            title: HTTP method (GET, POST, ...)
-          - name: route
-            type: string
-            title: Route (/api/sites)
-      - name: test_case
-        title: Test Case
-        attributes:
-          - name: test_type
-            type: string
-            title: Test type (unit, integration, e2e)
-          - name: framework
-            type: string
-            title: Framework (pytest, jest, ...)
-    relationship_types:
-      - name: implements
-        title: Implements requirement
-        source_aspects:
-          - implementation
-        target_aspects:
-          - modules
-          - user_scenarios
-          - user_interface
-        cardinality: many-to-many
-      - name: tested_by
-        title: Verified by test
-        source_aspects:
-          - modules
-          - user_scenarios
-          - user_interface
-        target_aspects:
-          - implementation
-        cardinality: many-to-many
-  - name: metrics
-    title: Business Metrics and Events
-    description:
-      Business metrics (counters, histograms), structured events, Grafana
-      dashboards, and alerting rules. Gauges reference requirements and entities via
-      measures. Dashboards contain gauges (contains). Alerts trigger on gauges
-      (triggers_on).
-    element_types:
-      - name: gauge
-        title: Gauge (Prometheus Metric)
-        attributes:
-          - name: metric_type
-            type: string
-            title: "Type: counter, gauge, histogram, summary"
-          - name: metric_name
-            type: string
-            title: Metric name (genpanel_*)
-          - name: help
-            type: string
-            title: Metric description
-          - name: labels
-            type: string
-            title: Labels (comma-separated)
-          - name: buckets
-            type: string
-            title: Buckets for histogram (comma-separated)
-      - name: event
-        title: Business Event
-        attributes:
-          - name: fields
-            type: string
-            title: Event fields (comma-separated)
-          - name: level
-            type: string
-            title: "Level: info, warn, error"
-      - name: dashboard
-        title: Grafana Dashboard
-        attributes:
-          - name: grafana_uid
-            type: string
-            title: Dashboard UID in Grafana
-          - name: refresh
-            type: string
-            title: Refresh interval (30s, 1m, 5m)
-      - name: alert
-        title: Alerting Rule
-        attributes:
-          - name: severity
-            type: string
-            title: "Severity: critical, warning, info"
-          - name: condition
-            type: string
-            title: PromQL condition
-          - name: for_duration
-            type: string
-            title: Trigger duration (5m, 15m)
-          - name: channel
-            type: string
-            title: "Channel: slack, jira, email"
-    relationship_types:
-      - name: measures
-        title: Measures (gauge/event → requirement/entity/module)
-        source_aspects:
-          - metrics
-        target_aspects:
-          - modules
-          - data_entities
-          - non_functional
-          - user_scenarios
-        cardinality: many-to-many
-      - name: contains
-        title: Dashboard contains gauge
-        source_aspects:
-          - metrics
-        target_aspects:
-          - metrics
-        cardinality: 1-to-many
-      - name: triggers_on
-        title: Alert triggers on gauge
-        source_aspects:
-          - metrics
-        target_aspects:
-          - metrics
-        cardinality: many-to-many
+    '
+  element_types:
+  - name: requirement
+    title: Non-Functional Requirement
+    attributes:
+    - name: category
+      type: string
+      title: Category (performance, security, scalability, ...)
+    - name: metric
+      type: string
+      title: Measurable metric
+    - name: target_value
+      type: string
+      title: Target value
+  relationship_types:
+  - name: applies_to
+    title: Applies to
+    source_aspects:
+    - non_functional
+    target_aspects:
+    - modules
+    - user_interface
+    cardinality: many-to-many
+- name: implementation
+  title: Implementation (Code)
+  description: 'Requirements-to-code traceability: code artifacts, API endpoints,
+    tests. Code implements requirements (implements). Tests verify requirements (tested_by).'
+  element_types:
+  - name: code_artifact
+    title: Code Artifact (class, function, module)
+    attributes:
+    - name: file_path
+      type: string
+      title: File path
+    - name: language
+      type: string
+      title: Programming language
+  - name: api_endpoint
+    title: API Endpoint
+    attributes:
+    - name: method
+      type: string
+      title: HTTP method (GET, POST, ...)
+    - name: route
+      type: string
+      title: Route (/api/sites)
+  - name: test_case
+    title: Test Case
+    attributes:
+    - name: test_type
+      type: string
+      title: Test type (unit, integration, e2e)
+    - name: framework
+      type: string
+      title: Framework (pytest, jest, ...)
+  relationship_types:
+  - name: implements
+    title: Implements requirement
+    source_aspects:
+    - implementation
+    target_aspects:
+    - modules
+    - user_scenarios
+    - user_interface
+    cardinality: many-to-many
+  - name: tested_by
+    title: Verified by test
+    source_aspects:
+    - modules
+    - user_scenarios
+    - user_interface
+    target_aspects:
+    - implementation
+    cardinality: many-to-many
+- name: metrics
+  title: Business Metrics and Events
+  description: Business metrics (counters, histograms), structured events, Grafana
+    dashboards, and alerting rules. Gauges reference requirements and entities via
+    measures. Dashboards contain gauges (contains). Alerts trigger on gauges (triggers_on).
+  element_types:
+  - name: gauge
+    title: Gauge (Prometheus Metric)
+    attributes:
+    - name: metric_type
+      type: string
+      title: 'Type: counter, gauge, histogram, summary'
+    - name: metric_name
+      type: string
+      title: Metric name (genpanel_*)
+    - name: help
+      type: string
+      title: Metric description
+    - name: labels
+      type: string
+      title: Labels (comma-separated)
+    - name: buckets
+      type: string
+      title: Buckets for histogram (comma-separated)
+  - name: event
+    title: Business Event
+    attributes:
+    - name: fields
+      type: string
+      title: Event fields (comma-separated)
+    - name: level
+      type: string
+      title: 'Level: info, warn, error'
+  - name: dashboard
+    title: Grafana Dashboard
+    attributes:
+    - name: grafana_uid
+      type: string
+      title: Dashboard UID in Grafana
+    - name: refresh
+      type: string
+      title: Refresh interval (30s, 1m, 5m)
+  - name: alert
+    title: Alerting Rule
+    attributes:
+    - name: severity
+      type: string
+      title: 'Severity: critical, warning, info'
+    - name: condition
+      type: string
+      title: PromQL condition
+    - name: for_duration
+      type: string
+      title: Trigger duration (5m, 15m)
+    - name: channel
+      type: string
+      title: 'Channel: slack, jira, email'
+  relationship_types:
+  - name: measures
+    title: Measures (gauge/event → requirement/entity/module)
+    source_aspects:
+    - metrics
+    target_aspects:
+    - modules
+    - data_entities
+    - non_functional
+    - user_scenarios
+    cardinality: many-to-many
+  - name: contains
+    title: Dashboard contains gauge
+    source_aspects:
+    - metrics
+    target_aspects:
+    - metrics
+    cardinality: 1-to-many
+  - name: triggers_on
+    title: Alert triggers on gauge
+    source_aspects:
+    - metrics
+    target_aspects:
+    - metrics
+    cardinality: many-to-many
 skills:
-  - system_analyst
-  - system_analyst
+- system_analyst
+- system_analyst

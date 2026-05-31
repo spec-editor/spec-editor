@@ -90,13 +90,13 @@ def validate(
                         element_id=element.id,
                         field="parent",
                         severity="warning",
-                        message=f"«TRANSLATED»: «TRANSLATED» «TRANSLATED» «TRANSLATED» «TRANSLATED» '{element.parent}'",
+                        message=f"Broken parent reference fixed: removed dangling parent '{element.parent}'",
                     )
                 )
                 report.fixed += 1
             else:
                 report.add_warning(
-                    element.id, "parent", f"Broken reference «TRANSLATED» '{element.parent}'"
+                    element.id, "parent", f"Broken parent reference: '{element.parent}' does not exist"
                 )
 
         # children
@@ -111,13 +111,13 @@ def validate(
                         element_id=element.id,
                         field="children",
                         severity="warning",
-                        message=f"«TRANSLATED»: «TRANSLATED» «TRANSLATED» children: {removed}",
+                        message=f"Fixed broken children references: removed {removed} dangling child ID(s)",
                     )
                 )
                 report.fixed += len(removed)
             else:
                 for c in removed:
-                    report.add_warning(element.id, "children", f"Broken reference «TRANSLATED» '{c}'")
+                    report.add_warning(element.id, "children", f"Broken children reference: '{c}' does not exist")
 
         # relationships
         for rel_type, entries in list(element.relationships.items()):
@@ -136,7 +136,7 @@ def validate(
                             element_id=element.id,
                             field=f"relationships.{rel_type}",
                             severity="warning",
-                            message=f"«TRANSLATED»: «TRANSLATED» {removed_count} «TRANSLATED» «TRANSLATED»",
+                            message=f"Fixed broken relationship references: removed {removed_count} dangling target(s)",
                         )
                     )
                     report.fixed += removed_count
@@ -144,7 +144,7 @@ def validate(
                     report.add_warning(
                         element.id,
                         f"relationships.{rel_type}",
-                        f"{removed_count} «TRANSLATED» «TRANSLATED»",
+                        f"{removed_count} broken relationship reference(s)",
                     )
 
         # Save the fixed element
@@ -152,7 +152,7 @@ def validate(
             try:
                 storage.write_element(element)
             except Exception as exc:
-                report.add_error(element.id, None, f"«TRANSLATED» «TRANSLATED»: {exc}")
+                report.add_error(element.id, None, f"Failed to save fixed element: {exc}")
 
         # Element and relationship types (do not auto-fix)
         aspect_def = get_aspect(methodology, element.aspect)
@@ -169,7 +169,7 @@ def validate(
                 report.add_error(
                     element.id,
                     "element_type",
-                    f"«TRANSLATED» '{element.element_type}' «TRANSLATED» «TRANSLATED». «TRANSLATED»: {', '.join(valid) or '«TRANSLATED»'}",
+                    f"Completed '{element.element_type}' Processing. Completed: {', '.join(valid) or 'Completed'}",
                 )
             valid_rels = {rt.name for rt in aspect_def.relationship_types}
             for rel_type in element.relationships:
