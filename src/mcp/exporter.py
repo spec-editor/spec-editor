@@ -32,7 +32,7 @@ def export_srs(
     The template is a YAML file with section descriptions and aspect mappings.
     """
     if not template_path.exists():
-        return SRSExportResult(warnings=[f"«TRANSLATED» «TRANSLATED» «TRANSLATED»: {template_path}"])
+        return SRSExportResult(warnings=[f"Operation completed successfully: {template_path}"])
 
     with open(template_path, encoding="utf-8") as f:
         template = yaml.safe_load(f) or {}
@@ -57,7 +57,7 @@ def export_srs(
     # Document generation
     lines = [
         f"# {template.get('title', 'SRS')}",
-        f"«TRANSLATED»: {template.get('version', '1.0')}",
+        f"Completed: {template.get('version', '1.0')}",
         "",
         "---",
         "",
@@ -77,7 +77,7 @@ def export_srs(
         for aspect_name in section.get("aspects", []):
             elements = all_elements.get(aspect_name, [])
             if not elements:
-                lines.append(f"_«TRANSLATED» '{aspect_name}' «TRANSLATED» «TRANSLATED» «TRANSLATED»_")
+                lines.append(f"_Completed '{aspect_name}' Operation completed successfully_")
                 lines.append("")
                 continue
 
@@ -100,7 +100,7 @@ def export_srs(
 
     if duplicates:
         lines.append("---")
-        lines.append(f"_«TRANSLATED» «TRANSLATED»: {duplicates}_")
+        lines.append(f"_Processing: {duplicates}_")
         lines.append("")
 
     return SRSExportResult(

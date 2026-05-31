@@ -88,7 +88,7 @@ async def answer_question_tool(
         }
     return {
         "status": "error",
-        "message": f"Question {question_id} «TRANSLATED» «TRANSLATED» «TRANSLATED» «TRANSLATED» answered",
+        "message": f"Question {question_id} has been answered and removed from queue",
     }
 
 
@@ -113,7 +113,7 @@ QUESTIONS_RO_TOOLS: list[ToolDef] = [
                 },
                 "status": {
                     "type": "string",
-                    "description": "open («TRANSLATED» «TRANSLATED») «TRANSLATED» all",
+                    "description": "open (pending answer) from all agents",
                 },
             },
             ["project_path"],
@@ -133,13 +133,13 @@ QUESTIONS_RW_TOOLS: list[ToolDef] = [
                 },
                 "agent": {
                     "type": "string",
-                    "description": "«TRANSLATED» «TRANSLATED» (Agent 1 / Agent 2)",
+                    "description": "Get answers from a specific agent (Agent 1 / Agent 2)",
                 },
                 "question": {"type": "string", "description": "Question text"},
                 "options": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "«TRANSLATED» «TRANSLATED» («TRANSLATED»)",
+                    "description": "Processing (Completed)",
                 },
             },
             ["project_path", "agent", "question"],
@@ -154,8 +154,8 @@ QUESTIONS_RW_TOOLS: list[ToolDef] = [
                     "type": "string",
                     "description": "Path to project root",
                 },
-                "question_id": {"type": "string", "description": "ID «TRANSLATED» (Q-0001)"},
-                "answer": {"type": "string", "description": "«TRANSLATED» «TRANSLATED»"},
+                "question_id": {"type": "string", "description": "ID Completed (Q-0001)"},
+                "answer": {"type": "string", "description": "Processing"},
             },
             ["project_path", "question_id", "answer"],
         ),

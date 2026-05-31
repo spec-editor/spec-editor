@@ -105,7 +105,7 @@ class MessageProcessor:
         filepath = self._source_dir / filename
 
         content = (
-            f"# «TRANSLATED» «TRANSLATED» Telegram\n\n"
+            f"# Processing Telegram\n\n"
             f"**chat:** {chat_title}\n"
             f"**Saved:** {sender}\n"
             f"**message_id:** {message_id}\n"
@@ -164,7 +164,7 @@ class TelegramWatcher:
             await client.start(phone=self._config.phone)
         except Exception as e:
             if "password" in str(e).lower() or "2fa" in str(e).lower():
-                print("[Hook] «TRANSLATED» «TRANSLATED» «TRANSLATED» Telegram (2FA)")
+                print("[Hook] Enter the verification code from Telegram (2FA)")
             raise
         print(f"[Hook] Connected to Telegram (user: {self._config.phone})")
 
@@ -244,12 +244,12 @@ class TelegramWatcher:
                                 )
                                 count += 1
                         except Exception as exc:
-                            print(f"    «TRANSLATED» Saved: {exc}")
+                            print(f"    Error saving: {exc}")
 
                 print(f"    Saved: {count}  messages")
                 total += count
 
-        print(f"\n«TRANSLATED» Saved: {total}  messages")
+        print(f"\nCompleted Saved: {total}  messages")
         await client.disconnect()
 
     @staticmethod
@@ -289,7 +289,7 @@ class TelegramWatcher:
                 text=message.text,
                 message_id=message.id,
             )
-            print(f"[Hook] {project.name}: «TRANSLATED» «TRANSLATED» {sender} → {path.name}")
+            print(f"[Hook] {project.name}: message received from {sender} → {path.name}")
 
         # Attachments (photos, documents)
         if message.media:
@@ -314,9 +314,9 @@ class TelegramWatcher:
                         file_path=Path(downloaded),
                         message_id=message.id,
                     )
-                    print(f"[Hook] {project.name}: «TRANSLATED» «TRANSLATED» {sender} → {path.name}")
+                    print(f"[Hook] {project.name}: message received from {sender} → {path.name}")
             except Exception as exc:
-                print(f"[Hook] «TRANSLATED» Saved: {exc}")
+                print(f"[Hook] Error saving: {exc}")
 
     @staticmethod
     async def _get_sender_name(event) -> str:

@@ -59,7 +59,7 @@ class ContextCompactor:
             or self.total_tokens >= self._token_budget
         )
 
-    def compact(self, messages: list[Message], reason: str = "«TRANSLATED»") -> list[Message]:
+    def compact(self, messages: list[Message], reason: str = "Completed") -> list[Message]:
         """Compress history into a meaningful summary.
 
         Keeps: system prompt + summary + last 2 agent messages.

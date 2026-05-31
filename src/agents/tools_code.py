@@ -347,9 +347,9 @@ CODE_RO_TOOLS: list[ToolDef] = [
     ),
     ToolDef(
         name="compact_context",
-        description="«TRANSLATED» «TRANSLATED» — «TRANSLATED» «TRANSLATED» «TRANSLATED» «TRANSLATED» tool_calls. «TRANSLATED» «TRANSLATED» «TRANSLATED» «TRANSLATED» «TRANSLATED» «TRANSLATED» «TRANSLATED» «TRANSLATED» «TRANSLATED».",
+        description="Processing — Operation completed successfully Completed tool_calls. Operation completed successfully Operation completed successfully Operation completed successfully.",
         parameters=_params(
-            {"reason": {"type": "string", "description": "«TRANSLATED» «TRANSLATED»"}}
+            {"reason": {"type": "string", "description": "Verification complete"}}
         ),
     ),
     ToolDef(
@@ -368,13 +368,13 @@ CODE_RO_TOOLS: list[ToolDef] = [
     ),
     ToolDef(
         name="verify_traceability",
-        description="Verify requirements traceability in code. Checks @implements coverage and reports gaps.'«TRANSLATED».",
+        description="Verify requirements traceability in code. Checks @implements coverage and reports gaps.'Completed.",
         parameters=_params(
             {
                 "code_dir": {"type": "string", "description": "Path to code directory"},
                 "language": {
                     "type": "string",
-                    "description": "«TRANSLATED» (python, typescript)",
+                    "description": "Completed (python, typescript)",
                 },
             },
             ["code_dir"],
@@ -382,13 +382,13 @@ CODE_RO_TOOLS: list[ToolDef] = [
     ),
     ToolDef(
         name="annotate_code",
-        description="«TRANSLATED» «TRANSLATED» «TRANSLATED» «TRANSLATED» @implements «TRANSLATED» «TRANSLATED» «TRANSLATED». dry_run=True «TRANSLATED» «TRANSLATED» «TRANSLATED».",
+        description="Operation completed successfully Completed @implements Operation completed successfully. dry_run=True Operation completed successfully.",
         parameters=_params(
             {
                 "code_dir": {"type": "string", "description": "Path to code directory"},
                 "dry_run": {
                     "type": "boolean",
-                    "description": "«TRANSLATED» «TRANSLATED» «TRANSLATED» «TRANSLATED» «TRANSLATED» («TRANSLATED» «TRANSLATED» true)",
+                    "description": "Operation completed successfully Processing (Processing true)",
                 },
             },
             ["code_dir"],

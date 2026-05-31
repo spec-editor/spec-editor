@@ -63,6 +63,11 @@ document to code and back.
 
 ## Quick Start
 
+> **See it in action:** `spec-editor demo` — opens a pre-generated spec in your browser.
+> No API key needed. 5 seconds.
+
+## Quick Start
+
 ```bash
 # Install
 pip install spec-editor
@@ -287,6 +292,42 @@ Install all: `pip install spec-editor`
 
 ---
 
+
+## Benchmark
+
+Spec Editor includes an automated evaluation system that measures agent output
+quality against golden graphs — hand-crafted reference specifications.
+
+### Evaluation Fixtures
+
+| Fixture | Elements | Aspects | Description |
+|---------|----------|---------|-------------|
+| **library** | 12 | modules, scenarios, entities, NFR | Public library management |
+| **store** | 13 | modules, scenarios, entities, NFR | E-commerce platform |
+| **site-matrix** | 21 | modules, scenarios, entities, NFR, UI, decisions | 1000-site control plane |
+
+### Evaluation Criteria
+
+The LLM-as-Judge evaluates agent output on 5 weighted criteria:
+
+| Criterion | Weight | What it measures |
+|-----------|--------|-----------------|
+| **completeness** | 25% | Expected elements present? |
+| **correctness** | 25% | Titles/descriptions match seed? |
+| **connectivity** | 20% | Relationships present and valid? |
+| **consistency** | 15% | No contradictions between elements? |
+| **clarity** | 15% | Clear and unambiguous? |
+
+### Baseline Scores
+
+| Fixture | Overall | Completeness | Correctness | Connectivity |
+|---------|---------|-------------|-------------|-------------|
+| library | 100% | 100/100 | 100/100 | 100/100 |
+| store | 100% | 100/100 | 100/100 | 100/100 |
+
+> **Note:** Baseline scores = golden-to-golden evaluation. Agent-generated scores
+> vary by model and prompts. Run `eval-system bench` to see current results.
+
 ## Help Wanted
 
 Prompts are the engine of Spec Editor. Better prompts = better specifications.
@@ -309,7 +350,10 @@ All prompt contributions are credited in the changelog. Good prompts make everyo
 
 ## Documentation
 
-- [CONTRIBUTING.md](CONTRIBUTING.md) — how to contribute
+- [Quickstart](docs/QUICKSTART.md) — 5-minute setup
+- [Architecture](docs/ARCHITECTURE.md) — pipeline, components, CLI reference
+- [Contributing Prompts](docs/CONTRIBUTING_PROMPTS.md) — how to improve agent quality
+- [CONTRIBUTING.md](CONTRIBUTING.md) — code contributions
 - [CHANGELOG.md](CHANGELOG.md) — release history
 - [readme_mcp.md](readme_mcp.md) — MCP server API reference
 

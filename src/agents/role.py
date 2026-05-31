@@ -21,7 +21,7 @@ class AgentRole:
         self.name = name
         self.writable = writable
         self.prompt = prompt
-        self._allowed_tools = allowed_tools  # None = «TRANSLATED» «TRANSLATED»
+        self._allowed_tools = allowed_tools  # None = Processing
 
     @classmethod
     def from_skill(

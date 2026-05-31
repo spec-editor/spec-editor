@@ -231,7 +231,7 @@ def _build_diagrams(list_elems: dict) -> dict[str, str]:
                             entry["target"] if isinstance(entry, dict) else entry.target
                         )
                         lines.append(f"    {sid} --> {target.replace('-', '_')}")
-        diagrams["«TRANSLATED» «TRANSLATED»"] = "\n".join(lines)
+        diagrams["Gathering complete"] = "\n".join(lines)
 
     # Entity diagram
     entities = [
@@ -255,7 +255,7 @@ def _build_diagrams(list_elems: dict) -> dict[str, str]:
                         lines.append(
                             f"    {sid} ||--o{{ {target.replace('-', '_')} : references"
                         )
-        diagrams["«TRANSLATED» «TRANSLATED»"] = "\n".join(lines)
+        diagrams["Gathering complete"] = "\n".join(lines)
 
     # Navigation diagram
     screens = [

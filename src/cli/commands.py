@@ -39,6 +39,35 @@ Describe the target system for which requirements are being developed.
 ## Constraints
 """
 
+_EXAMPLE_TEMPLATE = """\
+# Online Bookstore — Requirements
+
+A web application for selling books online. Customers browse a catalog,
+add items to cart, and complete purchases with credit card payment.
+
+## Purpose
+Replace the existing spreadsheet-based order system with a self-service
+web store for retail customers.
+
+## Key Features
+- Book catalog with search by title, author, and category
+- Shopping cart with quantity management
+- Checkout: shipping address, credit card payment, order confirmation
+- User accounts: registration, login, order history
+- Admin dashboard: inventory management, order processing, discount codes
+
+## Users and Roles
+- **Customer** — browses books, places orders, manages account
+- **Admin** — manages inventory, processes orders, creates discount codes
+- **Guest** — can browse and add to cart, must register at checkout
+
+## Constraints
+- Page load time < 2 seconds under normal load
+- Support 1000 concurrent users during peak hours
+- PCI-DSS compliance for credit card payments
+- GDPR compliance for user data (export, deletion)
+- Inventory must not oversell (concurrent checkout safety)
+"""
 
 @click.group()
 @implements("SRC-008")
@@ -63,7 +92,12 @@ def cli() -> None:
     type=click.Path(exists=True),
     help="YAML with agent configuration",
 )
-def init(path: str, methodology: str, agents: str | None) -> None:
+@click.option(
+    "--with-example",
+    is_flag=True,
+    help="Include a sample requirements document to try spec-editor run",
+)
+def init(path: str, methodology: str, agents: str | None, with_example: bool = False) -> None:
     """Initialize a new specification project at PATH."""
     project_path = Path(path).resolve()
 
@@ -93,7 +127,7 @@ def init(path: str, methodology: str, agents: str | None) -> None:
     source_dir = project_path / "source"
     source_dir.mkdir(exist_ok=True)
     readme_path = source_dir / "readme.md"
-    readme_path.write_text(_README_TEMPLATE, encoding="utf-8")
+    readme_path.write_text(_EXAMPLE_TEMPLATE if with_example else _README_TEMPLATE, encoding="utf-8")
 
     shutil.copy(method_path, project_path / "methodology.yaml")
 
@@ -135,7 +169,11 @@ def init(path: str, methodology: str, agents: str | None) -> None:
         f"  Agents: {agents_config.agent_1.model} / {agents_config.agent_2.model}"
     )
     console.print(f"  Orchestrator: {agents_config.orchestrator.model}")
-    console.print(f"\n  Next: cd {project_path} && spec-editor run")
+    if with_example:
+        console.print(f"\n  [green]Example source document ready![/green]")
+        console.print(f"  Next: cd {project_path} && spec-editor run")
+    else:
+        console.print(f"\n  Next: cd {project_path} && spec-editor run")
 
 
 def _create_default_agents_config() -> AgentsConfig:
@@ -1164,7 +1202,7 @@ def _export_jira(storage, project_path, output):
             "Summary,Description,Story Points,Priority,Epic Link,Acceptance Criteria,Labels,Sprint\n"
             '{% for story in stories %}"{{ story.title }}",'
             '"As a {{ story.as_a }}, I want {{ story.i_want }} so that {{ story.so_that }}",'
-            '{{ story.story_points }},{{ story.priority }},{{ story.epic }},"
+            '{{ story.story_points }},{{ story.priority }},{{ story.epic }}',
             '"{% for ac in story.acceptance_criteria %}GIVEN {{ ac.given }} WHEN {{ ac.when }} THEN {{ ac.then }}. {% endfor %}",'
             '{{ story.tags | join(" ") }},{{ story.sprint }}\n'
             "{% endfor %}"
@@ -1224,3 +1262,190 @@ def _export_compliance(storage, project_path, output):
         f"  Coverage: {stats['coverage_ratio']:.0%} "
         f"({stats['covered_controls']}/{stats['total_controls']} controls have evidence)"
     )
+
+
+# ======================================================================
+# view — render spec graph as interactive HTML/Mermaid
+# ======================================================================
+
+
+@cli.command()
+@click.option("--path", "-p", default=".", type=click.Path(exists=True), help="Project path")
+@click.option("--output", "-o", default=None, help="Output HTML file (default: temp + open browser)")
+def view(path: str, output: str | None) -> None:
+    """Render the specification as an interactive Mermaid graph in the browser."""
+    from src.view.renderer import MermaidRenderer
+
+    renderer = MermaidRenderer()
+    out = Path(output) if output else None
+    result = renderer.render_html(Path(path), out)
+    console.print(f"[green]Spec graph rendered:[/green] {result}")
+
+
+# ======================================================================
+# demo — quick start: copy bookstore example + open view
+# ======================================================================
+
+
+@cli.command()
+@click.option("--output", "-o", default=None, help="Output directory (default: temp)")
+def demo(output: str | None) -> None:
+    """Quick demo: see a pre-generated specification without any LLM calls.
+
+    Copies the bookstore example to a temp directory and opens
+    the interactive spec graph in your browser. No API key required.
+    """
+    import shutil
+    import tempfile
+
+    # Find bundled bookstore example
+    examples_dir = Path(__file__).parent.parent.parent / "examples" / "bookstore"
+    if not examples_dir.is_dir():
+        console.print("[red]Bookstore example not found[/red]")
+        raise SystemExit(1)
+
+    # Copy to output dir
+    if output:
+        demo_dir = Path(output)
+        demo_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        demo_dir = Path(tempfile.mkdtemp(prefix="spec-editor-demo-"))
+
+    if not (demo_dir / "aspects").exists():
+        shutil.copytree(examples_dir, demo_dir, dirs_exist_ok=True)
+
+    # Copy methodology.yaml for validate/export/run commands
+    builtin_methods = Path(__file__).parent.parent.parent / "methodologies"
+    method_file = builtin_methods / "waterfall.yaml"
+    if method_file.exists():
+        shutil.copy(method_file, demo_dir / "methodology.yaml")
+    builtin_methods = Path(__file__).parent.parent.parent / "methodologies"
+    method_file = builtin_methods / "waterfall.yaml"
+    if method_file.exists():
+        shutil.copy(method_file, demo_dir / "methodology.yaml")
+
+    # Copy agents.yaml for spec-editor run
+    agents_yaml = demo_dir / "agents.yaml"
+    if not agents_yaml.exists():
+        agents_yaml.write_text("""agents:
+  agent_1:
+    provider: deepseek
+    model: deepseek/deepseek-chat
+    temperature: 0.7
+    max_tokens: 4096
+  agent_2:
+    provider: deepseek
+    model: deepseek/deepseek-chat
+    temperature: 0.7
+    max_tokens: 4096
+  orchestrator:
+    provider: deepseek
+    model: deepseek/deepseek-chat
+    temperature: 0.3
+    max_tokens: 4096
+max_rounds: 20
+max_time_minutes: 30
+""")
+
+    console.print(f"[green]Demo project ready:[/green] {demo_dir}")
+    console.print()
+    console.print("[bold]What's inside:[/bold]")
+    console.print(f"  📄 input.md — raw requirements document (team chat style)")
+    console.print(f"  📂 aspects/   — structured specification (15 elements)")
+    console.print(f"     ├── modules/       (5): Catalog, Cart, Checkout, Accounts, Admin")
+    console.print(f"     ├── scenarios/     (2): Browse, Checkout")
+    console.print(f"     ├── entities/      (4): Book, Order, User, CartItem")
+    console.print(f"     └── non_functional/(4): Performance, Capacity, PCI-DSS, GDPR")
+    console.print()
+    console.print("[bold]Try these next:[/bold]")
+    console.print(f"  spec-editor view -p {demo_dir}")
+    console.print(f"  spec-editor validate -p {demo_dir}")
+    console.print(f"  spec-editor export -p {demo_dir}")
+    console.print()
+
+    # Auto-open view
+    from src.view.renderer import MermaidRenderer
+    renderer = MermaidRenderer()
+    html_path = demo_dir / "spec-graph.html"
+    renderer.render_html(demo_dir, html_path)
+    console.print(f"[green]Opened spec graph in browser[/green]")
+
+
+# ======================================================================
+# decisions — list/view architecture decision records
+# ======================================================================
+
+
+@cli.command()
+@click.option("--path", "-p", default=".", type=click.Path(exists=True), help="Project path")
+@click.option("--id", "-i", default=None, help="Show specific decision by ID")
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def decisions(path: str, id: str | None, json_output: bool) -> None:
+    """List or view architecture decision records (ADR)."""
+    from pathlib import Path as _Path
+    import frontmatter as _fm
+
+    project = _Path(path).resolve()
+    decisions_dir = project / "aspects" / "decisions"
+
+    if not decisions_dir.is_dir():
+        console.print("[yellow]No decisions recorded yet.[/yellow]")
+        console.print("Agents create decisions automatically during spec-editor run.")
+        return
+
+    decision_files = sorted(decisions_dir.glob("*.md"))
+    if not decision_files:
+        console.print("[yellow]No decision records found.[/yellow]")
+        return
+
+    if id:
+        # Show specific decision
+        df = decisions_dir / f"{id}.md"
+        if not df.exists():
+            console.print(f"[red]Decision {id} not found[/red]")
+            raise SystemExit(1)
+        post = _fm.load(str(df))
+        console.print(f"[bold]{post.metadata.get('id', '?')}: {post.metadata.get('title', '?')}[/bold]")
+        console.print(f"  Status: {post.metadata.get('status', 'draft')}")
+        console.print(f"  Relates to: {post.metadata.get('relates_to', [])}")
+        console.print()
+        console.print(post.content)
+        return
+
+    if json_output:
+        import json as _json
+        decisions_list = []
+        for df in decision_files:
+            post = _fm.load(str(df))
+            decisions_list.append({
+                "id": post.metadata.get("id"),
+                "title": post.metadata.get("title"),
+                "status": post.metadata.get("status", "draft"),
+                "relates_to": post.metadata.get("relates_to", []),
+                "content": post.content.strip()[:300],
+            })
+        console.print(_json.dumps(decisions_list, indent=2, ensure_ascii=False))
+        return
+
+    # Table view
+    table = Table(title=f"Architecture Decisions ({len(decision_files)})")
+    table.add_column("ID", style="cyan")
+    table.add_column("Title")
+    table.add_column("Status")
+    table.add_column("Relates to")
+
+    for df in decision_files:
+        post = _fm.load(str(df))
+        m = post.metadata
+        rels = ", ".join(m.get("relates_to", [])[:3])
+        if len(m.get("relates_to", [])) > 3:
+            rels += "..."
+        table.add_row(
+            m.get("id", "?"),
+            m.get("title", "?"),
+            m.get("status", "draft"),
+            rels or "—",
+        )
+
+    console.print(table)
+    console.print(f"\n[dim]Use --id <ID> to view full decision content[/dim]")

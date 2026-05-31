@@ -26,12 +26,12 @@ Return ONLY a JSON array of IDs' that should be deprecated.
 If no matches — return an empty array [].
 
 Response format: ONLY JSON, no explanation.
-«TRANSLATED»: ["NFR-export-pdf", "MOD-notifications"]
+targets: ["NFR-export-pdf", "MOD-notifications"]
 
-=== «TRANSLATED» ===
+=== Result ===
 {elements}
 
-=== «TRANSLATED» «TRANSLATED» ===
+=== Analysis Report ===
 {file_content}
 """
 
@@ -71,29 +71,29 @@ async def deprecate_from_file(
     """Read a deprecation file, find and deprecate matching requirements.
 
     Args:
-        storage: «TRANSLATED» «TRANSLATED»
-        provider: LLM-«TRANSLATED»
+        storage: element store
+        provider: LLM client
         file_path: Path to file with deprecation requirements
-        dry_run: True — «TRANSLATED» «TRANSLATED», «TRANSLATED» «TRANSLATED»
+        dry_run: True — showing changes without writing
 
     Returns:
         {'dry_run': bool, 'file': str, 'deprecated': [str, ...], 'not_found': [str, ...]}
     """
     if not file_path.exists():
-        return {"error": f"«TRANSLATED» «TRANSLATED» «TRANSLATED»: {file_path}"}
+        return {"error": f"File not found or invalid: {file_path}"}
 
     file_content = file_path.read_text(encoding="utf-8")
     element_list = _build_element_list(storage)
 
     if not element_list:
-        return {"error": "«TRANSLATED» confirmed/reviewed «TRANSLATED» «TRANSLATED» «TRANSLATED»"}
+        return {"error": "Only confirmed/reviewed elements can be deprecated"}
 
     prompt = _DEPRECATE_PROMPT.format(elements=element_list, file_content=file_content)
 
     from src.providers.base import LLMResponse, Message, MessageRole
 
     messages = [
-        Message(role=MessageRole.SYSTEM, content="«TRANSLATED» — «TRANSLATED» «TRANSLATED»."),
+        Message(role=MessageRole.SYSTEM, content="You are a deprecation analyst. Identify obsolete requirements."),
         Message(role=MessageRole.USER, content=prompt),
     ]
 
@@ -106,7 +106,7 @@ async def deprecate_from_file(
             "file": str(file_path),
             "deprecated": [],
             "not_found": [],
-            "message": "«TRANSLATED» «TRANSLATED» «TRANSLATED»",
+            "message": "Processing complete",
         }
 
     deprecated = []

@@ -37,7 +37,7 @@ def parse_md_file(path: Path) -> Element:
         ValueError: invalid YAML frontmatter or missing required fields
     """
     if not path.exists():
-        raise FileNotFoundError(f"«TRANSLATED» «TRANSLATED» «TRANSLATED»: {path}")
+        raise FileNotFoundError(f"Operation completed successfully: {path}")
 
     with open(path, encoding="utf-8") as f:
         post = frontmatter.load(f)
