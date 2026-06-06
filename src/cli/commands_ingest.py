@@ -1,20 +1,20 @@
 """CLI subcommand."""
 
+import asyncio
+import datetime
 from pathlib import Path
 
 import click
 from rich.console import Console
 
-from src.cli.commands import cli, console, _BUILTIN_METHODOLOGIES
-
-from src.storage.filesystem import FilesystemStorage
+from src.cli.commands import _BUILTIN_METHODOLOGIES, cli, console
+from src.config.settings import AgentConfig, create_provider
+from src.ingestion.analyzer import AnalysisReport, Analyzer
 from src.ingestion.preprocessor import SourcePreprocessor
-from src.ingestion.analyzer import Analyzer, AnalysisReport
 from src.ingestion.telegram_hook import TelegramWatcher
-from src.config.settings import create_provider, AgentConfig
+from src.storage.filesystem import FilesystemStorage
 from src.tracing import implements
-import asyncio
-import datetime
+
 
 @click.option(
     "--config",
@@ -35,7 +35,6 @@ import datetime
     help="Max messages when loading history (default: 200)",
 )
 @cli.command(name="hooks")
-
 def hooks_start(config: str, fetch_since: str | None, fetch_limit: int) -> None:
     """Start a Telegram hook for receiving requirements.
 
@@ -230,26 +229,40 @@ def analyze_cmd(path: str, file: str, auto_apply: bool) -> None:
 @implements("MOD-003")
 def mcp(path: str | None) -> None:
     """Start MCP server for external agents (stdio/json-rpc).
-    -p is optional. Without -p: project is switched via the switch_project tool.
+
+    MCP is configured in your AI agent, not in spec-editor.
+    Once the server is running, connect your agent with the config below.
+    See README: https://github.com/spec-editor/spec-editor#using-spec-editor-with-ai-coding-assistants
 
     \b
-    Connecting to ZED — add to ~/.config/zed/settings.json:
+    Agent config (Zed, Cursor, Claude Desktop, etc.):
     {
-      "mcp_servers": {
+      "mcpServers": {
         "spec-editor": {
-          "command": "/path/to/.venv/bin/spec-editor",
+          "command": "spec-editor",
           "args": ["mcp", "-p", "/path/to/project"]
         }
       }
     }
-    "
     """
     from src.mcp.server import mcp_server as _server
 
-    _server.callback(path if path else None)
+    import sys
+    proj = path or "."
+    print(
+        "[spec-editor] MCP server starting...",
+        "[spec-editor] This is not a command you run directly.",
+        "[spec-editor] MCP is configured in your AI agent — connect it with:",
+        f'  {{"mcpServers": {{"spec-editor": {{"command": "spec-editor", "args": ["mcp", "-p", "{proj}"]}}}}}}',
+        "[spec-editor] See README: https://github.com/spec-editor/spec-editor#using-spec-editor-with-ai-coding-assistants",
+        "[spec-editor] Waiting for agent connection... (Ctrl+C to stop)",
+        sep="\n",
+        file=sys.stderr,
+    )
+
+    _server.callback(proj if proj != "." else None)
 
 
 # ---------------------------------------------------------------------------
 # Export helper functions
 # ---------------------------------------------------------------------------
-

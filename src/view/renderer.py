@@ -18,8 +18,12 @@ class MermaidRenderer:
         "entities": "#E8A838",
         "non_functional": "#D94A4A",
         "nfr": "#D94A4A",
+        "user_interface": "#9B59B6",
         "ui": "#9B59B6",
+        "implementation": "#E67E22",
+        "metrics": "#1ABC9C",
         "decisions": "#1ABC9C",
+        "sources": "#95A5A6",
     }
     DEFAULT_COLOR = "#95A5A6"
 
@@ -27,14 +31,51 @@ class MermaidRenderer:
     # Public API
     # ------------------------------------------------------------------
 
-    def build_mermaid(self, project_path: Path) -> str:
+    def build_mermaid(
+        self,
+        project_path: Path,
+        element_id: str | None = None,
+        aspect_name: str | None = None,
+    ) -> str:
         """Build a Mermaid graph diagram from the project's aspects/.
+
+        Args:
+            element_id: if set, show only this element and its direct connections
+            aspect_name: if set, show all elements in this aspect and their relationships
 
         Returns a complete Mermaid diagram string (graph TD + nodes + edges).
         """
         elements = self._load_elements(project_path)
         if not elements:
             return "graph TD\n  EMPTY[No elements found]\n"
+
+        # Build element lookup
+        el_by_id = {el["id"]: el for el in elements}
+
+        # Filter elements
+        if element_id:
+            related_ids = {element_id}
+            # Outgoing: element → targets
+            if element_id in el_by_id:
+                for rel_type, targets in (
+                    el_by_id[element_id].get("relationships", {}).items()
+                ):
+                    for t in targets:
+                        tid = t["target"] if isinstance(t, dict) else t
+                        related_ids.add(tid)
+            # Incoming: sources → element
+            for eid, el in el_by_id.items():
+                for rel_type, targets in el.get("relationships", {}).items():
+                    for t in targets:
+                        tid = t["target"] if isinstance(t, dict) else t
+                        if tid == element_id:
+                            related_ids.add(eid)
+            elements = [el for el in elements if el["id"] in related_ids]
+        elif aspect_name:
+            elements = [el for el in elements if el.get("aspect") == aspect_name]
+
+        if not elements:
+            return f"graph TD\n  EMPTY[No matching elements for '{element_id or aspect_name}']\n"
 
         lines = ["graph TD"]
 
@@ -52,10 +93,16 @@ class MermaidRenderer:
             lines.append(f'  {eid}["{safe_title}"]')
             lines.append(f"  style {eid} fill:{color},stroke:#333,color:#fff")
 
-            # Relationships
+            # Relationships — only include edges where both nodes are in the filtered set
             for rel_type, targets in el.get("relationships", {}).items():
-                for target in targets:
-                    edges.add((eid, target, rel_type))
+                for t in targets:
+                    target_id = t["target"] if isinstance(t, dict) else t
+                    if element_id or aspect_name:
+                        if target_id not in node_ids and target_id not in {
+                            e["id"] for e in elements
+                        }:
+                            continue
+                    edges.add((eid, target_id, rel_type))
 
         # Add edges
         for from_id, to_id, label in sorted(edges):
@@ -63,13 +110,25 @@ class MermaidRenderer:
 
         return "\n".join(lines)
 
-    def render_html(self, project_path: Path, output_path: Path | None = None) -> Path:
+    def render_html(
+        self,
+        project_path: Path,
+        output_path: Path | None = None,
+        element_id: str | None = None,
+        aspect_name: str | None = None,
+    ) -> Path:
         """Render spec as self-contained interactive HTML.
 
         Opens in default browser when output_path is None (writes to temp).
         """
-        mermaid = self.build_mermaid(project_path)
+        mermaid = self.build_mermaid(
+            project_path, element_id=element_id, aspect_name=aspect_name
+        )
         title = project_path.name
+        if element_id:
+            title = f"{title} — {element_id}"
+        elif aspect_name:
+            title = f"{title} — {aspect_name}"
 
         html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -101,6 +160,7 @@ class MermaidRenderer:
 
         if output_path is None:
             import tempfile
+
             output_path = Path(tempfile.mktemp(suffix=".html"))
             auto_open = True
         else:
@@ -131,7 +191,13 @@ class MermaidRenderer:
                 # Normalize relationships from various frontmatter formats
                 if "relationships" not in el:
                     rels = {}
-                    for key in ("relates_to", "implements", "derived_from", "covered_by", "depends_on"):
+                    for key in (
+                        "relates_to",
+                        "implements",
+                        "derived_from",
+                        "covered_by",
+                        "depends_on",
+                    ):
                         val = el.get(key)
                         if val:
                             rels[key] = val if isinstance(val, list) else [val]
@@ -150,7 +216,7 @@ class MermaidRenderer:
             items.append(
                 f'<div class="legend-item">'
                 f'<div class="legend-dot" style="background:{color}"></div>'
-                f'<span>{aspect}</span>'
-                f'</div>'
+                f"<span>{aspect}</span>"
+                f"</div>"
             )
         return "\n".join(items)
