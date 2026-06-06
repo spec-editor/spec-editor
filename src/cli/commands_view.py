@@ -20,7 +20,12 @@ from src.view.renderer import MermaidRenderer
 
 @cli.command()
 @click.option(
-    "--path", "-p", default=".", type=click.Path(exists=True), help="Project path"
+    "--path",
+    "-p",
+    default=".",
+    envvar="SPEC_EDITOR_PROJECT",
+    type=click.Path(exists=True),
+    help="Path to project (or SPEC_EDITOR_PROJECT)",
 )
 @click.option(
     "--output",
@@ -34,7 +39,9 @@ from src.view.renderer import MermaidRenderer
 @click.option(
     "--aspect", "-a", default=None, help="Show all elements in aspect (e.g. modules)"
 )
-def view(path: str, output: str | None, element: str | None, aspect: str | None) -> None:
+def view(
+    path: str, output: str | None, element: str | None, aspect: str | None
+) -> None:
     """Render the specification as an interactive Mermaid graph in the browser.
 
     \b
@@ -46,7 +53,9 @@ def view(path: str, output: str | None, element: str | None, aspect: str | None)
 
     renderer = MermaidRenderer()
     out = Path(output) if output else None
-    result = renderer.render_html(Path(path), out, element_id=element, aspect_name=aspect)
+    result = renderer.render_html(
+        Path(path), out, element_id=element, aspect_name=aspect
+    )
     console.print(f"[green]Spec graph rendered:[/green] {result}")
 
 
@@ -56,7 +65,12 @@ def view(path: str, output: str | None, element: str | None, aspect: str | None)
 
 
 @cli.command()
-@click.option("--output", "-o", default=None, help="Output directory (default: temp)")
+@click.option(
+    "--output",
+    "-o",
+    default=None,
+    help="Output directory (default: /tmp/spec-editor-demo)",
+)
 def demo(output: str | None) -> None:
     """Quick demo: see a pre-generated specification without any LLM calls.
 
@@ -64,7 +78,7 @@ def demo(output: str | None) -> None:
     the interactive spec graph in your browser. No API key required.
     """
     import shutil
-    import tempfile
+    import sys
 
     # Find bundled bookstore example
     examples_dir = Path(__file__).parent.parent.parent / "examples" / "bookstore"
@@ -72,15 +86,15 @@ def demo(output: str | None) -> None:
         console.print("[red]Bookstore example not found[/red]")
         raise SystemExit(1)
 
-    # Copy to output dir
+    # Copy to output dir (short, predictable default)
     if output:
-        demo_dir = Path(output)
-        demo_dir.mkdir(parents=True, exist_ok=True)
+        demo_dir = Path(output).resolve()
     else:
-        demo_dir = Path(tempfile.mkdtemp(prefix="spec-editor-demo-"))
-
-    if not (demo_dir / "aspects").exists():
-        shutil.copytree(examples_dir, demo_dir, dirs_exist_ok=True)
+        demo_dir = Path("/tmp/spec-editor-demo")
+    # Fresh start: remove old demo if present
+    if demo_dir.exists():
+        shutil.rmtree(demo_dir)
+    shutil.copytree(examples_dir, demo_dir)
 
     # Copy methodology.yaml for validate/export/run commands
     builtin_methods = Path(__file__).parent.parent.parent / "methodologies"
@@ -111,6 +125,10 @@ max_rounds: 20
 max_time_minutes: 30
 """)
 
+    # Use the same binary path the user invoked (works whether they ran
+    # `spec-editor` from PATH or `./.venv/bin/spec-editor`)
+    spec_bin = sys.argv[0] if sys.argv[0] else "spec-editor"
+
     console.print(f"[green]Demo project ready:[/green] {demo_dir}")
     console.print()
     console.print("[bold]What's inside:[/bold]")
@@ -124,15 +142,22 @@ max_time_minutes: 30
     console.print(f"     └── non_functional/(4): Performance, Capacity, PCI-DSS, GDPR")
     console.print()
     console.print("[bold]Try these next:[/bold]")
-    console.print(f"  cd {demo_dir}")
-    console.print(f"  spec-editor view")
-    console.print(f"  spec-editor status")
-    console.print(f"  spec-editor validate")
-    console.print(f"  spec-editor export")
-    console.print()
     console.print(
-        "[dim]Most commands use -p . by default — no need to specify it.[/dim]"
+        f"  [bold cyan]export SPEC_EDITOR_PROJECT={demo_dir}[/bold cyan]  ← run this first!"
     )
+    console.print(f"  {spec_bin} view")
+    console.print(f"  {spec_bin} status")
+    console.print(f"  {spec_bin} validate")
+    console.print(f"  {spec_bin} export")
+    console.print()
+    console.print("[bold]Want to build specs for your own project?[/bold]")
+    console.print("  1. Put requirements docs, chat logs, or PDFs into a folder")
+    console.print(f"  2. {spec_bin} init my-project && cd my-project")
+    console.print(f"  3. {spec_bin} run       # agents debate, produce aspects/")
+    console.print(f"  4. {spec_bin} mcp &     # start MCP server in background")
+    console.print("  5. Connect your AI coding agent (Claude Code, Cursor, Zed)")
+    console.print("     to the MCP server — with detailed, structured specs,")
+    console.print("     the generated code will be far more complete and consistent.")
     console.print()
 
     # Auto-open view
@@ -151,7 +176,12 @@ max_time_minutes: 30
 
 @cli.command()
 @click.option(
-    "--path", "-p", default=".", type=click.Path(exists=True), help="Project path"
+    "--path",
+    "-p",
+    default=".",
+    envvar="SPEC_EDITOR_PROJECT",
+    type=click.Path(exists=True),
+    help="Path to project (or SPEC_EDITOR_PROJECT)",
 )
 @click.option("--id", "-i", default=None, help="Show specific decision by ID")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
@@ -233,7 +263,14 @@ def decisions(path: str, id: str | None, json_output: bool) -> None:
 
 
 @cli.command(name="context")
-@click.option("--path", "-p", default=".", type=click.Path(exists=True))
+@click.option(
+    "--path",
+    "-p",
+    default=".",
+    envvar="SPEC_EDITOR_PROJECT",
+    type=click.Path(exists=True),
+    help="Path to project (or SPEC_EDITOR_PROJECT)",
+)
 @click.option("--file", "-f", default=None, help="Code file for context")
 @click.option("--element", "-e", default=None, help="Spec element ID")
 @click.option("--task", "-t", default=None, help="Task description search")

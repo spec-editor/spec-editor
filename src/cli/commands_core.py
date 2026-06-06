@@ -1,19 +1,19 @@
 """CLI subcommand."""
 
+import json
+import time
+from collections import defaultdict
 from pathlib import Path
 
 import click
 from rich.console import Console
+from rich.table import Table
 
-from src.cli.commands import cli, console, _BUILTIN_METHODOLOGIES
-
-from src.storage.filesystem import FilesystemStorage
+from src.cli.commands import _BUILTIN_METHODOLOGIES, cli, console
 from src.config.methodology import load_methodology
 from src.mcp.metrics import compute_metrics
 from src.mcp.validator import ValidationReport, validate
-from rich.table import Table
-import json
-import time
+from src.storage.filesystem import FilesystemStorage
 
 # validate
 # ======================================================================
@@ -40,26 +40,98 @@ def validate_cmd(path: str, strict: bool) -> None:
         )
         raise SystemExit(1)
 
+    console.print(f"[bold]Validating specification[/bold] at {project_path}")
+    console.print()
+
+    # Step 1: Load methodology
     method = load_methodology(method_path)
+    aspect_names = ", ".join(a.name for a in method.aspects)
+    console.print(f"  [dim]Methodology:[/dim] {method.name} v{method.version}")
+    console.print(f"  [dim]Aspects:[/dim] {aspect_names}")
+
+    # Step 2: Read elements
     storage = FilesystemStorage(project_path)
+    all_summaries = storage.list_all()
+    elem_count = len(all_summaries)
+    console.print(f"  [dim]Elements found:[/dim] {elem_count}")
+    console.print()
+
+    # Step 3: Run validation
     report: ValidationReport = validate(storage, method)
 
+    # Categorise errors by what they check
+    def _cat(field: str | None) -> str:
+        if field is None:
+            return "read"
+        if field == "id":
+            return "duplicates"
+        if field in ("aspect", "element_type"):
+            return "methodology types"
+        if field == "title":
+            return "required fields"
+        if field in ("parent", "children"):
+            return "parent/children refs"
+        if field and field.startswith("relationships"):
+            return "relationship types"
+        return "other"
+
+    err_by_cat: dict[str, list] = defaultdict(list)
+    warn_by_cat: dict[str, list] = defaultdict(list)
+    for e in report.errors:
+        err_by_cat[_cat(e.field)].append(e)
+    for w in report.warnings:
+        warn_by_cat[_cat(w.field)].append(w)
+
+    # Step 4: Show checklist
+    checks = [
+        ("read", "Elements readable"),
+        ("duplicates", "No duplicate IDs"),
+        ("required fields", "Required fields (aspect, type, title)"),
+        ("parent/children refs", "Parent/children references"),
+        ("relationship types", "Relationship types vs methodology"),
+        ("methodology types", "Aspect & element types vs methodology"),
+    ]
+
+    for cat, label in checks:
+        errors = err_by_cat.get(cat, [])
+        warnings = warn_by_cat.get(cat, [])
+        if not errors and not warnings:
+            console.print(f"  [green]OK[/green]    {label}")
+        elif errors:
+            console.print(f"  [red]FAIL[/red]  {label} ({len(errors)} errors)")
+        else:
+            console.print(
+                f"  [yellow]WARN[/yellow]  {label} ({len(warnings)} warnings)"
+            )
+
+    console.print()
+
+    # Step 5: Show details for failures
     if report.errors:
-        console.print("[red]Validation errors:[/red]")
+        console.print("[red]Errors:[/red]")
         for err in report.errors:
             loc = f"{err.element_id}:{err.field}" if err.element_id else "-"
-            console.print(f"  [red]✗[/red] [{loc}] {err.message}")
+            console.print(f"  [red]X[/red] [{loc}] {err.message}")
 
     if report.warnings:
+        console.print()
         console.print("[yellow]Warnings:[/yellow]")
         for warn in report.warnings:
             loc = f"{warn.element_id}:{warn.field}" if warn.element_id else "-"
-            console.print(f"  [yellow]⚠[/yellow] [{loc}] {warn.message}")
+            console.print(f"  [yellow]![/yellow] [{loc}] {warn.message}")
 
+    console.print()
     if report.passed and not report.warnings:
-        console.print("[green]✓ Validation passed. No errors.[/green]")
+        console.print(f"[green]Passed. {elem_count} elements, no errors.[/green]")
     elif report.passed:
-        console.print("[yellow]✓ Validation passed with warnings.[/yellow]")
+        console.print(
+            f"[yellow]Passed with {len(report.warnings)} warning(s).[/yellow]"
+        )
+    else:
+        console.print(
+            f"[red]Failed: {len(report.errors)} error(s), "
+            f"{len(report.warnings)} warning(s).[/red]"
+        )
 
 
 # ======================================================================
@@ -274,4 +346,3 @@ def _print_entry(entry):
             if len(tool_parts) > 8:
                 tools_str += f" | +{len(tool_parts) - 8} more"
             console.print(f"     [dim]↳ {tools_str}[/dim]")
-

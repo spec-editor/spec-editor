@@ -31,9 +31,28 @@ class MarkdownFormatter(Formatter):
                 if el.content:
                     lines.append("")
                     lines.append(el.content.strip())
+                # Relationships
+                rel_lines = _format_element_rels(el)
+                if rel_lines:
+                    lines.append("")
+                    lines.extend(rel_lines)
                 lines.append("")
 
         return "\n".join(lines)
+
+
+def _format_element_rels(el) -> list[str]:
+    """Format element relationships as Markdown bullet points."""
+    result: list[str] = []
+    for rel_type, entries in el.relationships.items():
+        if rel_type in ("derived_from",):
+            continue
+        targets = [e["target"] if isinstance(e, dict) else e.target for e in entries]
+        if targets:
+            result.append(f"- **{rel_type}**: {', '.join(targets)}")
+    if el.children:
+        result.append(f"- **children**: {', '.join(el.children)}")
+    return result
 
 
 class Jinja2Formatter(Formatter):

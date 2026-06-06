@@ -12,6 +12,7 @@ from rich.table import Table
 from src.cli.commands import _BUILTIN_METHODOLOGIES, cli, console
 from src.cli.commands_export_helpers import (
     _export_compliance,
+    _export_html,
     _export_jira,
     _export_openapi,
     _export_srs,
@@ -47,7 +48,7 @@ from src.storage.filesystem import FilesystemStorage
     "-f",
     "format",
     default="srs",
-    type=click.Choice(["srs", "trlc", "openapi", "jira", "compliance"]),
+    type=click.Choice(["srs", "html", "trlc", "openapi", "jira", "compliance"]),
     help="Export format",
 )
 def export(
@@ -60,6 +61,7 @@ def export(
 
     Supported formats:
       srs      — IEEE 830 SRS document (Markdown)
+      html     — Styled HTML with relationships (srs_style.j2)
       trlc     — TRLC requirements-as-code (BMW-compatible)
       openapi  — OpenAPI 3.0 YAML (api-first methodology)
       jira     — Jira CSV for sprint backlog import (agile methodology)
@@ -72,7 +74,9 @@ def export(
     project_path = Path(path).resolve()
     storage = FilesystemStorage(project_path)
 
-    if format == "trlc":
+    if format == "html":
+        _export_html(storage, project_path, output)
+    elif format == "trlc":
         _export_trlc(storage, project_path, output)
     elif format == "openapi":
         _export_openapi(storage, project_path, output)

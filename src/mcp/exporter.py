@@ -32,7 +32,9 @@ def export_srs(
     The template is a YAML file with section descriptions and aspect mappings.
     """
     if not template_path.exists():
-        return SRSExportResult(warnings=[f"Operation completed successfully: {template_path}"])
+        return SRSExportResult(
+            warnings=[f"Operation completed successfully: {template_path}"]
+        )
 
     with open(template_path, encoding="utf-8") as f:
         template = yaml.safe_load(f) or {}
@@ -57,7 +59,7 @@ def export_srs(
     # Document generation
     lines = [
         f"# {template.get('title', 'SRS')}",
-        f"Completed: {template.get('version', '1.0')}",
+        f"Version: {template.get('version', '1.0')}",
         "",
         "---",
         "",
@@ -77,7 +79,7 @@ def export_srs(
         for aspect_name in section.get("aspects", []):
             elements = all_elements.get(aspect_name, [])
             if not elements:
-                lines.append(f"_Completed '{aspect_name}' Operation completed successfully_")
+                lines.append(f"_No elements in '{aspect_name}'_")
                 lines.append("")
                 continue
 
@@ -93,6 +95,11 @@ def export_srs(
                     if el.content:
                         lines.append("")
                         lines.append(el.content.strip())
+                    # Render relationships
+                    rel_lines = _format_relationships(el)
+                    if rel_lines:
+                        lines.append("")
+                        lines.extend(rel_lines)
                     lines.append("")
                     elements_count += 1
 
@@ -100,7 +107,7 @@ def export_srs(
 
     if duplicates:
         lines.append("---")
-        lines.append(f"_Processing: {duplicates}_")
+        lines.append(f"_Duplicates removed: {duplicates}_")
         lines.append("")
 
     return SRSExportResult(
@@ -109,6 +116,20 @@ def export_srs(
         elements=elements_count,
         duplicates_found=duplicates,
     )
+
+
+def _format_relationships(el: Element) -> list[str]:
+    """Format element relationships as Markdown lines."""
+    lines: list[str] = []
+    for rel_type, entries in el.relationships.items():
+        if rel_type in ("derived_from",):
+            continue  # skip provenance, shown elsewhere
+        targets = [e.target for e in entries]
+        if targets:
+            lines.append(f"- **{rel_type}**: {', '.join(targets)}")
+    if el.children:
+        lines.append(f"- **children**: {', '.join(el.children)}")
+    return lines
 
 
 def _deduplicate(
