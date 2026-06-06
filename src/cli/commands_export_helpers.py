@@ -1,19 +1,50 @@
 """CLI subcommand."""
 
+import re
+import shutil
+import tempfile
 from pathlib import Path
 
 import click
+from jinja2 import BaseLoader, Environment
 from rich.console import Console
 
-from src.cli.commands import cli, console, _BUILTIN_METHODOLOGIES
-
-from src.export.pipeline import pipeline_from_config
+from src.cli.commands import _BUILTIN_METHODOLOGIES, cli, console
 from src.export.compliance_exporter import ComplianceExporter
+from src.export.pipeline import pipeline_from_config
 from src.storage.filesystem import FilesystemStorage
-from jinja2 import Environment, BaseLoader
-import re
-import tempfile
-import shutil
+
+
+def _export_html(storage, project_path, output):
+    """Export to styled HTML using srs_style.j2 template."""
+    from pathlib import Path
+
+    from src.export.pipeline import pipeline_from_config
+
+    # SRS template YAML (section structure) for the gatherer
+    srs_tpl = Path(__file__).parent.parent.parent / "srs_template.yaml"
+    # Jinja2 HTML template for the formatter
+    html_tpl = Path(__file__).parent.parent.parent / "srs_style.j2"
+
+    cfg = {
+        "gatherer": "srs",
+        "formatter": "jinja2",
+        "transport": "file",
+    }
+    pipeline = pipeline_from_config(cfg, storage, project_path)
+    out_path, data = pipeline.run(
+        storage,
+        srs_tpl,
+        project_path,
+        format_config={"template": str(html_tpl)},
+        transport_config={"output": output or str(project_path / "srs.html")},
+    )
+
+    console.print(f"[green]HTML saved to {out_path}[/green]")
+    total = sum(len(s.elements) for s in data.sections)
+    console.print(f"  Sections: {len(data.sections)}")
+    console.print(f"  Elements: {total}")
+
 
 def _export_srs(storage, project_path, output, template):
     """Export to IEEE 830 SRS document."""
@@ -247,5 +278,3 @@ def _export_compliance(storage, project_path, output):
         f"  Coverage: {stats['coverage_ratio']:.0%} "
         f"({stats['covered_controls']}/{stats['total_controls']} controls have evidence)"
     )
-
-

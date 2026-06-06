@@ -103,20 +103,24 @@ def element_to_frontmatter(element: Element) -> dict:
 def frontmatter_to_element(fm: dict, content: str) -> Element:
     """Create an Element from a frontmatter dict and markdown body."""
 
+    # Known frontmatter fields that are NOT relationship types
+    _KNOWN_FIELDS = set(_FRONTMATTER_FIELDS)
+
     # Parse relationships — supports both formats:
     # 1. Dict: relationships: {relates_to: [{target: "ID"}]}
-    # 2. List: relates_to: [MOD-001, SCN-002]  (user-friendly shorthand)
+    # 2. List: depends_on: [MOD-001]  (user-friendly shorthand)
     relationships_raw = fm.get("relationships", {})
     relationships: dict[str, list[RelationshipEntry]] = {}
 
-    # Normalize list-style relationships into dict format
-    for key in ("relates_to", "implements", "derived_from", "covered_by", "decided_by", "depends_on"):
-        if key in fm:
-            value = fm[key]
-            if isinstance(value, list):
-                relationships_raw[key] = [{"role": key, "target": v} for v in value]
-            elif isinstance(value, str):
-                relationships_raw[key] = [{"role": key, "target": value}]
+    # Normalize list-style relationships: any unknown field with a list/str
+    # value is treated as a relationship type (e.g. depends_on, applies_to)
+    for key, value in fm.items():
+        if key in _KNOWN_FIELDS:
+            continue
+        if isinstance(value, list):
+            relationships_raw[key] = [{"role": key, "target": v} for v in value]
+        elif isinstance(value, str):
+            relationships_raw[key] = [{"role": key, "target": value}]
 
     if relationships_raw:
         for rel_type, entries in relationships_raw.items():

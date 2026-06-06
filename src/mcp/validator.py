@@ -177,7 +177,7 @@ def validate(
                 report.add_error(
                     element.id,
                     "element_type",
-                    f"Completed '{element.element_type}' Processing. Completed: {', '.join(valid) or 'Completed'}",
+                    f"Unknown element type '{element.element_type}' for aspect '{element.aspect}'. Valid types: {', '.join(valid)}",
                 )
             valid_rels = {rt.name for rt in aspect_def.relationship_types}
             for rel_type in element.relationships:
