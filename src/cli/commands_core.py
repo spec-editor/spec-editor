@@ -8,6 +8,7 @@ from rich.console import Console
 from src.cli.commands import cli, console, _BUILTIN_METHODOLOGIES
 
 from src.storage.filesystem import FilesystemStorage
+from src.config.methodology import load_methodology
 from src.mcp.metrics import compute_metrics
 from src.mcp.validator import ValidationReport, validate
 from rich.table import Table

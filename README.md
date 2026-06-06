@@ -55,6 +55,8 @@ document to code and back.
 **Spec Editor solves this by:**
 - Running **multiple agents** with different viewpoints in structured rounds
 - Supporting **blind voting** — agents respond without seeing each other
+- **Methodology-driven aspects** — waterfall decomposes into modules, scenarios, UI, data, NFR, metrics, implementation; agile uses backlog and sprints
+- **Skill-based specialisation** — agents spawn helpers with focused prompts for scenario decomposition, UI navigation, metrics linking
 - Producing **version-controlled artifacts** in git (markdown + YAML)
 - Persisting **session history** for incremental runs
 - Linking code to requirements via **@implements** annotations
@@ -65,8 +67,6 @@ document to code and back.
 
 > **See it in action:** `spec-editor demo` — opens a pre-generated spec in your browser.
 > No API key needed. 5 seconds.
-
-## Quick Start
 
 ```bash
 # Install
@@ -266,15 +266,15 @@ Edit `agents.yaml` to choose your provider:
 agents:
   agent_1:
     provider: deepseek     # or openai, anthropic
-    model: deepseek-chat
+    model: deepseek-reasoner
     temperature: 0.7
   agent_2:
     provider: deepseek
-    model: deepseek-chat
+    model: deepseek-reasoner
     temperature: 0.7
   orchestrator:
     provider: deepseek
-    model: deepseek-chat
+    model: deepseek-reasoner
 ```
 
 Set `SPEC_EDITOR__LOG_LEVEL=DEBUG` for verbose output including tool calls.
@@ -293,50 +293,14 @@ Install all: `pip install spec-editor`
 ---
 
 
-## Benchmark
-
-Spec Editor includes an automated evaluation system that measures agent output
-quality against golden graphs — hand-crafted reference specifications.
-
-### Evaluation Fixtures
-
-| Fixture | Elements | Aspects | Description |
-|---------|----------|---------|-------------|
-| **library** | 12 | modules, scenarios, entities, NFR | Public library management |
-| **store** | 13 | modules, scenarios, entities, NFR | E-commerce platform |
-| **site-matrix** | 21 | modules, scenarios, entities, NFR, UI, decisions | 1000-site control plane |
-
-### Evaluation Criteria
-
-The LLM-as-Judge evaluates agent output on 5 weighted criteria:
-
-| Criterion | Weight | What it measures |
-|-----------|--------|-----------------|
-| **completeness** | 25% | Expected elements present? |
-| **correctness** | 25% | Titles/descriptions match seed? |
-| **connectivity** | 20% | Relationships present and valid? |
-| **consistency** | 15% | No contradictions between elements? |
-| **clarity** | 15% | Clear and unambiguous? |
-
-### Baseline Scores
-
-| Fixture | Overall | Completeness | Correctness | Connectivity |
-|---------|---------|-------------|-------------|-------------|
-| library | 100% | 100/100 | 100/100 | 100/100 |
-| store | 100% | 100/100 | 100/100 | 100/100 |
-
-> **Note:** Baseline scores = golden-to-golden evaluation. Agent-generated scores
-> vary by model and prompts. Run `eval-system bench` to see current results.
-
 ## Help Wanted
 
 Prompts are the engine of Spec Editor. Better prompts = better specifications.
 
 **We need help with:**
 - **Language packs** — translations that sound native, not machine-translated. Current languages: EN, RU, ES, FR, DE. Missing your language? Add `prompts/xx.yaml` and open a PR.
-- **Methodology prompts** — each methodology (scrum, regulatory, api-first) needs its own prompt tuning. The defaults work, but domain-specific prompts produce dramatically better results.
 - **LLM-specific tuning** — DeepSeek, GPT-4, and Claude each respond differently to the same prompt. If you've tuned prompts for your preferred model, share them.
-- **Few-shot examples** — adding 2–3 worked examples to each prompt significantly improves output quality. We have none yet.
+- **Few-shot examples** — examples are now included in all language prompts. Help us add more domain-specific examples for your industry.
 
 **How to contribute prompts:**
 1. Fork the repo
@@ -345,6 +309,56 @@ Prompts are the engine of Spec Editor. Better prompts = better specifications.
 4. Open a PR with a before/after comparison of agent output
 
 All prompt contributions are credited in the changelog. Good prompts make everyone's specs better.
+
+Got ideas beyond prompts? **Open an issue** with your feature request, or
+**submit a PR** directly — we review everything.
+
+
+
+## Using Spec Editor with AI Coding Assistants
+
+Spec Editor runs an MCP server accessible to any MCP-compatible agent
+(Zed, Cursor, Claude Desktop, Aider, Windsurf, etc.).
+Connect it and your coding agent gains access to your specification
+for context-aware code generation.
+
+### Quick Setup
+
+```bash
+spec-editor init my-project && cd my-project
+cp ~/docs/requirements.md source/
+spec-editor run          # agents generate the specification
+spec-editor mcp -p . &   # start MCP server in background
+```
+
+### Connect Your Agent
+
+Add to your agent's MCP config (`.mcp.json`, `mcp.json`, or agent settings):
+
+```json
+{
+  "mcpServers": {
+    "spec-editor": {
+      "command": "spec-editor",
+      "args": ["mcp", "-p", "/absolute/path/to/project"]
+    }
+  }
+}
+```
+
+### What Your Agent Gets
+
+| Tool | Description |
+|------|-------------|
+| `get_context_for_file` | Spec context for a code file via `@implements` annotations |
+| `search_elements` | Full-text search across requirements |
+| `read_element` | Read any specification element by ID |
+| `list_all_elements` | Browse entire specification |
+
+Add `@implements("REQ-ID")` decorators to your code — the agent
+automatically pulls linked requirements into its context.
+
+Full API reference: [readme_mcp.md](readme_mcp.md)
 
 ---
 

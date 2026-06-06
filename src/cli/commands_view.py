@@ -1,19 +1,18 @@
 """CLI subcommand."""
 
+import shutil
+import tempfile
+import webbrowser
 from pathlib import Path
 
 import click
+import frontmatter
 from rich.console import Console
 
-from src.cli.commands import cli, console, _BUILTIN_METHODOLOGIES
-
-from src.view.renderer import MermaidRenderer
-from src.storage.filesystem import FilesystemStorage
+from src.cli.commands import _BUILTIN_METHODOLOGIES, cli, console
 from src.context.builder import ContextBuilder
-import frontmatter
-import tempfile
-import shutil
-import webbrowser
+from src.storage.filesystem import FilesystemStorage
+from src.view.renderer import MermaidRenderer
 
 # view — render spec graph as interactive HTML/Mermaid
 # ======================================================================
@@ -29,13 +28,25 @@ import webbrowser
     default=None,
     help="Output HTML file (default: temp + open browser)",
 )
-def view(path: str, output: str | None) -> None:
-    """Render the specification as an interactive Mermaid graph in the browser."""
+@click.option(
+    "--element", "-e", default=None, help="Focus on element ID and its connections"
+)
+@click.option(
+    "--aspect", "-a", default=None, help="Show all elements in aspect (e.g. modules)"
+)
+def view(path: str, output: str | None, element: str | None, aspect: str | None) -> None:
+    """Render the specification as an interactive Mermaid graph in the browser.
+
+    \b
+    Full graph:   spec-editor view
+    By element:   spec-editor view -e ENT-004
+    By aspect:    spec-editor view -a modules
+    """
     from src.view.renderer import MermaidRenderer
 
     renderer = MermaidRenderer()
     out = Path(output) if output else None
-    result = renderer.render_html(Path(path), out)
+    result = renderer.render_html(Path(path), out, element_id=element, aspect_name=aspect)
     console.print(f"[green]Spec graph rendered:[/green] {result}")
 
 
@@ -72,10 +83,6 @@ def demo(output: str | None) -> None:
         shutil.copytree(examples_dir, demo_dir, dirs_exist_ok=True)
 
     # Copy methodology.yaml for validate/export/run commands
-    builtin_methods = Path(__file__).parent.parent.parent / "methodologies"
-    method_file = builtin_methods / "waterfall.yaml"
-    if method_file.exists():
-        shutil.copy(method_file, demo_dir / "methodology.yaml")
     builtin_methods = Path(__file__).parent.parent.parent / "methodologies"
     method_file = builtin_methods / "waterfall.yaml"
     if method_file.exists():
@@ -117,9 +124,15 @@ max_time_minutes: 30
     console.print(f"     └── non_functional/(4): Performance, Capacity, PCI-DSS, GDPR")
     console.print()
     console.print("[bold]Try these next:[/bold]")
-    console.print(f"  spec-editor view -p {demo_dir}")
-    console.print(f"  spec-editor validate -p {demo_dir}")
-    console.print(f"  spec-editor export -p {demo_dir}")
+    console.print(f"  cd {demo_dir}")
+    console.print(f"  spec-editor view")
+    console.print(f"  spec-editor status")
+    console.print(f"  spec-editor validate")
+    console.print(f"  spec-editor export")
+    console.print()
+    console.print(
+        "[dim]Most commands use -p . by default — no need to specify it.[/dim]"
+    )
     console.print()
 
     # Auto-open view
