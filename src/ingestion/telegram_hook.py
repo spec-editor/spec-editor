@@ -89,7 +89,7 @@ class MessageProcessor:
     """Saves text messages and attachments to the project's source/."""
 
     def __init__(self, source_dir: Path):
-        self._source_dir = Path(source_dir) / "source_raw"
+        self._source_dir = Path(source_dir) / "sources_raw"
         self._source_dir.mkdir(parents=True, exist_ok=True)
 
     def save_text_message(

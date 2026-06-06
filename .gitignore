@@ -60,3 +60,5 @@ dialogue.jsonl
 # Source raw - keep dir, exclude contents
 source_raw/*
 !source_raw/.gitkeep
+backend/
+run.log

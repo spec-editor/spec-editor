@@ -97,7 +97,7 @@ Use `verify_traceability` to check coverage and find gaps.
 ## Ingestion Pipeline
 
 ```
-Telegram chat → source_raw/msg_*.md
+Telegram chat → sources_raw/msg_*.md
   → preprocessor (spam filter + fact extraction)
   → analyzer (duplicate/conflict detection)
   → SRC draft elements in aspects/sources/

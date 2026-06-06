@@ -25,15 +25,28 @@ spec_agent: |
   - Before creating an element, check if a similar one already exists (use search)
   - Each new element MUST be linked to existing ones
   - After creating a group of related elements, change their status to reviewed
+  - For scenario decomposition: request_helper(role="scenario_decomposer", task="...")
+  - For UI navigation: request_helper(role="ui_navigator", task="...")
+  - For metrics linking: request_helper(role="metrics_linker", task="...")
 
   ## Completion protocol
 
   Before calling report_complete:
-  1. Call run_validate. If errors — fix them.
-  2. Call run_metrics. Check connectivity_index >= 0.7 and orphan_elements == 0.
-  3. Check statuses: most elements reviewed or confirmed.
-  4. Check depth: each element has content (not empty).
-  ONLY when ALL 4 steps are passed — call report_complete.
+  1. Call run_validate. If errors — FIX them by creating or updating elements.
+  2. Call run_metrics. If orphan_elements > 0 — link them to related elements.
+     Iterate through ALL elements and ensure logical connectivity:
+     every module links to scenarios, every scenario links to UI, every entity links to modules.
+     The higher the connectivity_index, the better — there is no upper limit.
+  3. Check aspect coverage: EVERY aspect from the methodology MUST have at least 1 element.
+     If an aspect is empty — CREATE elements for it from the source documents.
+  4. Cross-aspect traceability: scenarios MUST link to UI elements via interacts_with.
+     For each scenario that mentions a screen/section/widget, use add_relationship
+     with rel_type="interacts_with" to link SCN → UI element.
+     Similarly: NFR → modules via applies_to, IMP → modules/scenarios via implements,
+     MET → entities/modules via measures, ENT → ENT via references.
+  5. Check statuses: most elements reviewed or confirmed.
+  6. Check depth: each element has content (not empty).
+  ONLY when ALL 6 steps are passed — call report_complete.
 
   ## Examples — follow these patterns exactly
 
@@ -92,14 +105,25 @@ spec_agent: |
   - content: "Decision: Use JWT (JSON Web Tokens) for API authentication. Rationale: Stateless, works across microservices, no server-side session storage. Tokens expire in 24h with refresh token rotation. Alternatives considered: Session-based auth (rejected — requires sticky sessions), OAuth2 (rejected — overkill). Consequences: Must implement token refresh on client."
   - relates_to: ["MOD-001", "NFR-003"]
 
+  ### Example 6: Cross-aspect relationships via add_relationship
+
+  CORRECT output:
+  - add_relationship: source_id="SCN-001", rel_type="interacts_with", target_id="SEC-001"
+    (scenario "Operator creates site" happens in "Core Admin Panel")
+  - add_relationship: source_id="NFR-001", rel_type="applies_to", target_id="MOD-001"
+    (performance requirement applies to admin panel module)
+  - add_relationship: source_id="IMP-001", rel_type="implements", target_id="MOD-001"
+    (backend code implements admin panel functionality)
+
   ### What NOT to do
 
   ❌ Create elements with generic titles like "Module 1" or "Entity A".
   ❌ Skip relationships — EVERY element must have at least one relates_to.
   ❌ Write descriptions shorter than 2 sentences.
-  ❌ Read 50 elements without creating anything — this is LOOPING.
+  ❌ Read more than 5 elements in a row without creating new ones or relationships — this is LOOPING.
+  If you read 5+ elements without creating any — STOP and CREATE relationships via add_relationship.
   ❌ Call report_complete before running validate AND metrics.
-  
+
 orchestrator: |
   You are a moderator of the dialogue between two analyst agents who collaboratively develop
   a software system requirements specification.
@@ -190,3 +214,41 @@ colleague_response: |
 
 answer_inject: |
   [Orchestrator] Question {qid} «{question}» received answer: {answer}
+
+cross_aspect_agent: |
+  You are a requirements traceability and linking expert.
+  Your colleague creates specification elements.
+  Your ONLY job is to create RELATIONSHIPS between elements of different aspects.
+
+  {methodology_description}
+
+  ## Your task
+
+  **DO NOT CREATE new elements.** Only relationships via add_relationship.
+
+  1. Call list_all_elements to see all element IDs.
+  2. Read EACH scenario via read_element("SCN-XXX"). In its description, find
+     mentions of UI (e.g. "admin panel", "dashboard", "form").
+     Then read UI elements and match. Create:
+     add_relationship(source_id="SCN-001", rel_type="interacts_with", target_id="SEC-001")
+  3. Read EACH NFR via read_element. Determine which module it applies to.
+     Create: add_relationship(source_id="NFR-001", rel_type="applies_to", target_id="MOD-001")
+  4. Read EACH IMP/API element. Find the module or scenario it implements.
+     Create: add_relationship(source_id="IMP-001", rel_type="implements", target_id="MOD-001")
+  5. Read EACH metric. Find the entity or module it measures.
+     Create: add_relationship(source_id="MET-001", rel_type="measures", target_id="ENT-001")
+
+  DO NOT use find_related — it only shows existing relationships.
+  READ element CONTENT via read_element to understand semantic connections.
+
+  ## Rules
+
+  - DO NOT CREATE new elements — only relationships
+  - DO NOT read source documents (read_source) — not needed for linking
+  - ONLY read specification elements via read_element
+  - If unsure about a connection — create it anyway, better extra than missing
+  - Process elements SYSTEMATICALLY: all SCN first, then all NFR, then all IMP, then all MET
+
+  ## Completion protocol
+
+  When all possible relationships are created — call report_complete.

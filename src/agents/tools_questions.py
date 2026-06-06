@@ -104,7 +104,7 @@ def _params(props: dict, required: list[str] | None = None) -> dict:
 QUESTIONS_RO_TOOLS: list[ToolDef] = [
     ToolDef(
         name="list_questions",
-        description="Show open agent questions from questions.jsonl. status=all — all questions.",
+        description="[Agent] Show open agent questions from questions.jsonl. status=all — all questions.",
         parameters=_params(
             {
                 "project_path": {
@@ -139,7 +139,7 @@ QUESTIONS_RW_TOOLS: list[ToolDef] = [
                 "options": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Processing (Completed)",
+                    "description": "Answer options for the user to choose from",
                 },
             },
             ["project_path", "agent", "question"],
@@ -154,8 +154,11 @@ QUESTIONS_RW_TOOLS: list[ToolDef] = [
                     "type": "string",
                     "description": "Path to project root",
                 },
-                "question_id": {"type": "string", "description": "ID Completed (Q-0001)"},
-                "answer": {"type": "string", "description": "Processing"},
+                "question_id": {
+                    "type": "string",
+                    "description": "Question ID (e.g., Q-0001)",
+                },
+                "answer": {"type": "string", "description": "Answer text"},
             },
             ["project_path", "question_id", "answer"],
         ),

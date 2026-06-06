@@ -270,5 +270,5 @@ class TestSessionManagerSourceDir:
         assert mgr.source_dir == tmp_path / "source"
 
     def test_source_dir_custom(self, tmp_path):
-        mgr = SessionManager(project_root=tmp_path, source_dir_name="source_raw")
-        assert mgr.source_dir == tmp_path / "source_raw"
+        mgr = SessionManager(project_root=tmp_path, source_dir_name="sources_raw")
+        assert mgr.source_dir == tmp_path / "sources_raw"

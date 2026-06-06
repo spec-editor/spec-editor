@@ -38,7 +38,7 @@ class FakeResponseAgent:
     def _get_source_dir(self):
         return ""
 
-    async def run(self, message, history=None):
+    async def run(self, message, history=None, trace_callback=None):
         resp = self._responses[min(self._idx, len(self._responses) - 1)]
         self._idx += 1
         return resp

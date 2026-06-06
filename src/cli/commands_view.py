@@ -1,0 +1,246 @@
+"""CLI subcommand."""
+
+from pathlib import Path
+
+import click
+from rich.console import Console
+
+from src.cli.commands import cli, console, _BUILTIN_METHODOLOGIES
+
+from src.view.renderer import MermaidRenderer
+from src.storage.filesystem import FilesystemStorage
+from src.context.builder import ContextBuilder
+import frontmatter
+import tempfile
+import shutil
+import webbrowser
+
+# view — render spec graph as interactive HTML/Mermaid
+# ======================================================================
+
+
+@cli.command()
+@click.option(
+    "--path", "-p", default=".", type=click.Path(exists=True), help="Project path"
+)
+@click.option(
+    "--output",
+    "-o",
+    default=None,
+    help="Output HTML file (default: temp + open browser)",
+)
+def view(path: str, output: str | None) -> None:
+    """Render the specification as an interactive Mermaid graph in the browser."""
+    from src.view.renderer import MermaidRenderer
+
+    renderer = MermaidRenderer()
+    out = Path(output) if output else None
+    result = renderer.render_html(Path(path), out)
+    console.print(f"[green]Spec graph rendered:[/green] {result}")
+
+
+# ======================================================================
+# demo — quick start: copy bookstore example + open view
+# ======================================================================
+
+
+@cli.command()
+@click.option("--output", "-o", default=None, help="Output directory (default: temp)")
+def demo(output: str | None) -> None:
+    """Quick demo: see a pre-generated specification without any LLM calls.
+
+    Copies the bookstore example to a temp directory and opens
+    the interactive spec graph in your browser. No API key required.
+    """
+    import shutil
+    import tempfile
+
+    # Find bundled bookstore example
+    examples_dir = Path(__file__).parent.parent.parent / "examples" / "bookstore"
+    if not examples_dir.is_dir():
+        console.print("[red]Bookstore example not found[/red]")
+        raise SystemExit(1)
+
+    # Copy to output dir
+    if output:
+        demo_dir = Path(output)
+        demo_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        demo_dir = Path(tempfile.mkdtemp(prefix="spec-editor-demo-"))
+
+    if not (demo_dir / "aspects").exists():
+        shutil.copytree(examples_dir, demo_dir, dirs_exist_ok=True)
+
+    # Copy methodology.yaml for validate/export/run commands
+    builtin_methods = Path(__file__).parent.parent.parent / "methodologies"
+    method_file = builtin_methods / "waterfall.yaml"
+    if method_file.exists():
+        shutil.copy(method_file, demo_dir / "methodology.yaml")
+    builtin_methods = Path(__file__).parent.parent.parent / "methodologies"
+    method_file = builtin_methods / "waterfall.yaml"
+    if method_file.exists():
+        shutil.copy(method_file, demo_dir / "methodology.yaml")
+
+    # Copy agents.yaml for spec-editor run
+    agents_yaml = demo_dir / "agents.yaml"
+    if not agents_yaml.exists():
+        agents_yaml.write_text("""agents:
+  agent_1:
+    provider: deepseek
+    model: deepseek/deepseek-chat
+    temperature: 0.7
+    max_tokens: 4096
+  agent_2:
+    provider: deepseek
+    model: deepseek/deepseek-chat
+    temperature: 0.7
+    max_tokens: 4096
+  orchestrator:
+    provider: deepseek
+    model: deepseek/deepseek-chat
+    temperature: 0.3
+    max_tokens: 4096
+max_rounds: 20
+max_time_minutes: 30
+""")
+
+    console.print(f"[green]Demo project ready:[/green] {demo_dir}")
+    console.print()
+    console.print("[bold]What's inside:[/bold]")
+    console.print(f"  📄 input.md — raw requirements document (team chat style)")
+    console.print(f"  📂 aspects/   — structured specification (15 elements)")
+    console.print(
+        f"     ├── modules/       (5): Catalog, Cart, Checkout, Accounts, Admin"
+    )
+    console.print(f"     ├── scenarios/     (2): Browse, Checkout")
+    console.print(f"     ├── entities/      (4): Book, Order, User, CartItem")
+    console.print(f"     └── non_functional/(4): Performance, Capacity, PCI-DSS, GDPR")
+    console.print()
+    console.print("[bold]Try these next:[/bold]")
+    console.print(f"  spec-editor view -p {demo_dir}")
+    console.print(f"  spec-editor validate -p {demo_dir}")
+    console.print(f"  spec-editor export -p {demo_dir}")
+    console.print()
+
+    # Auto-open view
+    from src.view.renderer import MermaidRenderer
+
+    renderer = MermaidRenderer()
+    html_path = demo_dir / "spec-graph.html"
+    renderer.render_html(demo_dir, html_path)
+    console.print(f"[green]Opened spec graph in browser[/green]")
+
+
+# ======================================================================
+# decisions — list/view architecture decision records
+# ======================================================================
+
+
+@cli.command()
+@click.option(
+    "--path", "-p", default=".", type=click.Path(exists=True), help="Project path"
+)
+@click.option("--id", "-i", default=None, help="Show specific decision by ID")
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def decisions(path: str, id: str | None, json_output: bool) -> None:
+    """List or view architecture decision records (ADR)."""
+    from pathlib import Path as _Path
+
+    import frontmatter as _fm
+
+    project = _Path(path).resolve()
+    decisions_dir = project / "aspects" / "decisions"
+
+    if not decisions_dir.is_dir():
+        console.print("[yellow]No decisions recorded yet.[/yellow]")
+        console.print("Agents create decisions automatically during spec-editor run.")
+        return
+
+    decision_files = sorted(decisions_dir.glob("*.md"))
+    if not decision_files:
+        console.print("[yellow]No decision records found.[/yellow]")
+        return
+
+    if id:
+        # Show specific decision
+        df = decisions_dir / f"{id}.md"
+        if not df.exists():
+            console.print(f"[red]Decision {id} not found[/red]")
+            raise SystemExit(1)
+        post = _fm.load(str(df))
+        console.print(
+            f"[bold]{post.metadata.get('id', '?')}: {post.metadata.get('title', '?')}[/bold]"
+        )
+        console.print(f"  Status: {post.metadata.get('status', 'draft')}")
+        console.print(f"  Relates to: {post.metadata.get('relates_to', [])}")
+        console.print()
+        console.print(post.content)
+        return
+
+    if json_output:
+        import json as _json
+
+        decisions_list = []
+        for df in decision_files:
+            post = _fm.load(str(df))
+            decisions_list.append(
+                {
+                    "id": post.metadata.get("id"),
+                    "title": post.metadata.get("title"),
+                    "status": post.metadata.get("status", "draft"),
+                    "relates_to": post.metadata.get("relates_to", []),
+                    "content": post.content.strip()[:300],
+                }
+            )
+        console.print(_json.dumps(decisions_list, indent=2, ensure_ascii=False))
+        return
+
+    # Table view
+    table = Table(title=f"Architecture Decisions ({len(decision_files)})")
+    table.add_column("ID", style="cyan")
+    table.add_column("Title")
+    table.add_column("Status")
+    table.add_column("Relates to")
+
+    for df in decision_files:
+        post = _fm.load(str(df))
+        m = post.metadata
+        rels = ", ".join(m.get("relates_to", [])[:3])
+        if len(m.get("relates_to", [])) > 3:
+            rels += "..."
+        table.add_row(
+            m.get("id", "?"),
+            m.get("title", "?"),
+            m.get("status", "draft"),
+            rels or "—",
+        )
+
+    console.print(table)
+    console.print(f"\n[dim]Use --id <ID> to view full decision content[/dim]")
+
+
+@cli.command(name="context")
+@click.option("--path", "-p", default=".", type=click.Path(exists=True))
+@click.option("--file", "-f", default=None, help="Code file for context")
+@click.option("--element", "-e", default=None, help="Spec element ID")
+@click.option("--task", "-t", default=None, help="Task description search")
+def context_cmd(path, file, element, task):
+    """Build spec context for AI coding assistants."""
+    from pathlib import Path as _Path
+
+    from src.context.builder import ContextBuilder
+    from src.storage.filesystem import FilesystemStorage
+
+    project = _Path(path).resolve()
+    storage = FilesystemStorage(project)
+    builder = ContextBuilder(storage, project)
+    if file:
+        ctx = builder.for_file(_Path(file))
+    elif element:
+        ctx = builder.for_element(element)
+    elif task:
+        ctx = builder.for_task(task)
+    else:
+        console.print("[red]Specify --file, --element, or --task[/red]")
+        raise SystemExit(1)
+    console.print(ctx)

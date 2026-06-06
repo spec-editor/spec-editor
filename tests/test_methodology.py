@@ -282,9 +282,7 @@ class TestMethodologyLoader:
         )
         m = load_methodology(waterfall_path)
         assert m.name == "waterfall"
-        assert (
-            len(m.aspects) == 7
-        )  # modules, user_scenarios, user_interface, data_entities, non_functional, implementation, metrics
+        assert len(m.aspects) == 8  # sources, modules, user_scenarios, user_interface, data_entities, non_functional, implementation, metrics
 
 
 class TestMethodologyQueries:
@@ -416,7 +414,7 @@ class TestMethodologyManager:
         mgr = MethodologyManager()
         m = mgr.load("waterfall")
         assert m.name == "waterfall"
-        assert len(m.aspects) == 7
+        assert len(m.aspects) == 8  # sources, modules, user_scenarios, user_interface, data_entities, non_functional, implementation, metrics
 
     def test_load_agile(self, tmp_path):
         """Load agile from test data (paid, moved out of OSS repo)."""
@@ -445,3 +443,4 @@ class TestMethodologyManager:
         mgr = MethodologyManager()
         m = mgr.get_default()
         assert m.name == "waterfall"
+        assert len(m.aspects) == 8  # sources, modules, user_scenarios, user_interface, data_entities, non_functional, implementation, metrics

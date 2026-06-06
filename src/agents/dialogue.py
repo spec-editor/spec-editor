@@ -150,10 +150,18 @@ class DialogueManager:
                 self._agent_1, "Agent 1", bus, stop_event, initial_message=initial_task
             )
         )
+        # Agent 2 gets its own focused task for cross-aspect relationships
+        cross_task = (
+            "Read SCN-001 and SCR-001. If related, create: "
+            "add_relationship(source_id='SCN-001', rel_type='interacts_with', target_id='SCR-001'). "
+            "Repeat for all SCN with all SCR/SEC. Then NFR with MOD via applies_to. "
+            "Then IMP with MOD via implements. Read 2 elements, link, next pair. "
+            "Do NOT read all elements first — link as you go."
+        )
         agent2_task = asyncio.create_task(
             self._agent_loop(
-                self._agent_2, "Agent 2", bus, stop_event, initial_message=None
-            )  # Agent 2 waits for Agent 1
+                self._agent_2, "Agent 2", bus, stop_event, initial_message=cross_task
+            )
         )
         self._tasks = [agent1_task, agent2_task]
 
@@ -295,7 +303,7 @@ class DialogueManager:
             raise RuntimeError(f"Agent limit reached (8). Wait for helpers to finish.")
         self._helper_counter += 1
         helper_name = f"Helper-{role}-{self._helper_counter}"
-        helper = self._make_helper_agent(helper_name)
+        helper = self._make_helper_agent(helper_name, role_name=role)
         helper_task = asyncio.create_task(
             self._agent_loop(
                 helper,
@@ -310,9 +318,21 @@ class DialogueManager:
         logger.info("helper_spawned", name=helper_name, role=role)
         return helper_name
 
-    def _make_helper_agent(self, name: str) -> SpecAgent:
-        """Create a helper agent with the same settings."""
+    def _make_helper_agent(self, name: str, role_name: str = "") -> SpecAgent:
+        """Create a helper agent. If role_name matches a skill, use its prompt + tools."""
         from src.agents.spec_agent import SpecAgent as SA
+        from src.config.skills import SkillsRegistry
+
+        skill_role = None
+        if role_name:
+            skills_path = self._project_path / "skills.yaml" if self._project_path else None
+            if skills_path and skills_path.exists():
+                registry = SkillsRegistry(skills_path)
+                skill = registry.get(role_name)
+                if skill:
+                    from src.agents.role import AgentRole
+                    skill_role = AgentRole.from_skill(skill, writable=True, default_prompt="")
+                    logger.info("helper_skill_loaded", name=name, skill=role_name)
 
         return SA(
             name=name,
@@ -320,6 +340,7 @@ class DialogueManager:
             storage=self._storage,
             methodology=self._methodology_ref,
             source_dir=self._source_dir_ref,
+            role=skill_role,
         )
 
     async def _agent_loop(
@@ -335,10 +356,17 @@ class DialogueManager:
         If is_helper=True — exits after completing its task."""
         last_seen = 0
 
+        # Trace callback for detailed logging
+        if self._dialogue_logger:
+            _logger_ref = self._dialogue_logger
+            _trace = lambda msg: _logger_ref.log_trace(msg)
+        else:
+            _trace = None
+
         # First message
         if initial_message:
             try:
-                response = await agent.run(initial_message)
+                response = await agent.run(initial_message, trace_callback=_trace)
             except Exception as exc:
                 logger.error("agent_error", agent=name, error=str(exc))
                 return
@@ -389,7 +417,9 @@ class DialogueManager:
                 prompt = (
                     f"Your colleague responded:\n\n{content}\n\nAnalyse and respond."
                 )
-                response = await agent.run(prompt, await bus.get_history())
+                response = await agent.run(
+                    prompt, await bus.get_history(), trace_callback=_trace
+                )
             except Exception as exc:
                 logger.error("agent_error", agent=name, error=str(exc))
                 break
@@ -457,6 +487,31 @@ class DialogueManager:
                     self._dialogue_logger.log_orchestrator(
                         "question_answered", answer_text, 0
                     )
+
+    def _src_coverage_str(self) -> str:
+        """Return a string describing SRC element coverage."""
+        all_elements = self._storage.list_all()
+        src_elements = [e for e in all_elements if e.id.startswith("SRC-")]
+        spec_elements = [e for e in all_elements if not e.id.startswith("SRC-")]
+        src_ids = {e.id for e in src_elements}
+        covered = 0
+        for se in spec_elements:
+            try:
+                full = self._storage.read_element(se.id)
+                if full.derived_from:
+                    covered += 1
+                    continue
+                for entries in (full.relationships or {}).values():
+                    if any(e.target in src_ids for e in entries):
+                        covered += 1
+                        break
+            except Exception:
+                pass
+        total_src = len(src_elements)
+        total_spec = len(spec_elements)
+        if total_src == 0:
+            return "No SRC elements."
+        return f"SRC coverage: {covered}/{total_spec} spec elements traced to {total_src} sources."
 
     def _make_result(
         self, status: str, rounds: int, history: list[Message]
@@ -579,6 +634,20 @@ class DialogueLogger:
         )
         self._file.flush()
 
+    def log_trace(self, message: str) -> None:
+        """Log a detailed trace line from agent execution (tool calls, results)."""
+        self._file.write(
+            json.dumps(
+                {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "trace": message,
+                },
+                ensure_ascii=False,
+            )
+            + "\n"
+        )
+        self._file.flush()
+
     def close(self) -> None:
         self._file.close()
 
@@ -653,7 +722,9 @@ class DialogueOrchestrator:
     ) -> tuple[OrchestratorDecision, str]:
         """Evaluate a round."""
         if round_num >= max_rounds:
-            return OrchestratorDecision.WARNING, (f"agent limit reached ({max_rounds})")
+            return OrchestratorDecision.COMPLETE, (
+                f"Round limit reached ({max_rounds})"
+            )
 
         a1_declared = self._has_declared(history, "Agent 1")
         a2_declared = self._has_declared(history, "Agent 2")

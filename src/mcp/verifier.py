@@ -215,7 +215,7 @@ def _get_file_patterns(language: str) -> list[str]:
 def verify_sources(storage: StorageAdapter) -> VerificationReport:
     """Verify that all SRC requirements are covered by specification elements.
 
-    SRC elements are created from source_raw/ by the preprocessor.
+    SRC elements are created from sources_raw/ by the preprocessor.
     The specification should cover them via derived_from.
     """
     report = VerificationReport()

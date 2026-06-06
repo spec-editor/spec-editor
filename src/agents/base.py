@@ -18,6 +18,64 @@ from src.providers.base import (
 logger = get_logger(__name__)
 
 
+def _format_tool_names(tool_calls: list[ToolCall]) -> list[str]:
+    """Format tool names with key arguments for trace display."""
+    result = []
+    for tc in tool_calls:
+        name = tc.name
+        args = tc.arguments or {}
+        if name == "read_source":
+            fname = args.get("filename", "")
+            result.append(f"read_source({fname})" if fname else "read_source")
+        elif name == "read_element":
+            eid = args.get("element_id", "")
+            result.append(f"read_element({eid})" if eid else "read_element")
+        elif name == "list_aspect":
+            aname = args.get("aspect_name", "")
+            result.append(f"list_aspect({aname})" if aname else "list_aspect")
+        elif name == "search_elements":
+            q = args.get("query", "")
+            result.append(f"search_elements({q[:30]})" if q else "search_elements")
+        elif name == "find_related":
+            eid = args.get("element_id", "")
+            result.append(f"find_related({eid})" if eid else "find_related")
+        elif name == "request_helper":
+            role = args.get("role", "")
+            result.append(f"request_helper({role})" if role else "request_helper")
+        else:
+            result.append(name)
+    return result
+
+
+def _format_tool_result(tool_name: str, result: dict) -> str:
+    """Format the result of a tool call for trace display."""
+    if tool_name == "run_validate":
+        passed = result.get("passed", False)
+        n_errors = len(result.get("errors", []))
+        n_warnings = len(result.get("warnings", []))
+        n_fixed = result.get("fixed", 0)
+        status = "✓" if passed else "✗"
+        parts = [f"{status}"]
+        if n_errors:
+            parts.append(f"{n_errors} errors")
+        if n_warnings:
+            parts.append(f"{n_warnings} warnings")
+        if n_fixed:
+            parts.append(f"{n_fixed} fixed")
+        return (
+            f"validate: {'passed' if passed else 'FAILED'} ({', '.join(parts[1:])})"
+            if parts[1:]
+            else f"validate: {'passed' if passed else 'FAILED'}"
+        )
+    if tool_name == "run_metrics":
+        total = result.get("total_elements", 0)
+        rels = result.get("total_relationships", 0)
+        ci = result.get("connectivity_index", 0)
+        orphans = result.get("orphan_elements", 0)
+        return f"metrics: {total} el, {rels} rel, CI={ci:.2f}, orphans={orphans}"
+    return ""
+
+
 class BaseAgent:
     """Agent with LLM and smart context compaction (ContextCompactor)."""
 
@@ -45,6 +103,7 @@ class BaseAgent:
         self,
         user_message: str,
         conversation_history: list[Message] | None = None,
+        trace_callback: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         """Send a message to the agent and get a response."""
         messages: list[Message] = []
@@ -53,6 +112,10 @@ class BaseAgent:
             messages.append(
                 Message(role=MessageRole.SYSTEM, content=self._system_prompt)
             )
+            if trace_callback:
+                trace_callback(
+                    f"[{self.name}] SYSTEM PROMPT:\n{self._system_prompt}"
+                )
         else:
             has_system = any(m.role == MessageRole.SYSTEM for m in conversation_history)
             if not has_system:
@@ -76,6 +139,8 @@ class BaseAgent:
         messages.append(
             Message(role=MessageRole.USER, content=user_message, name="user")
         )
+        if trace_callback:
+            trace_callback(f"[{self.name}] TASK:\n{user_message}")
 
         tools = self._tools if self._provider.supports_tools() else None
         _total_calls = 0
@@ -87,8 +152,7 @@ class BaseAgent:
         _cumulative_completion = 0  # accumulated completion tokens
 
         while True:
-            _total_calls += 1
-            if _total_calls > _hard_limit:
+            if _total_calls >= _hard_limit:
                 logger.warning(
                     "llm_call_limit_reached",
                     agent=self.name,
@@ -102,6 +166,7 @@ class BaseAgent:
                 )
 
             response = await self._provider.complete(messages=messages, tools=tools)
+            _total_calls += 1  # count only successful API calls
 
             # Record tokens and plan
             self._compactor.record_llm_call(
@@ -155,6 +220,7 @@ class BaseAgent:
             ]
             if reads and not writes and not rels:
                 parts.append(f"reads {len(reads)} elements")
+            # Format remaining tool names with arguments
             other = [
                 n
                 for n in tool_names
@@ -171,7 +237,11 @@ class BaseAgent:
                 )
             ]
             if other:
-                parts.append(", ".join(other))
+                # Use formatted names for key tools
+                pretty_other = _format_tool_names(
+                    [tc for tc in response.tool_calls if tc.name in other]
+                )
+                parts.append(", ".join(pretty_other))
             total_all = (
                 self._compactor._total_prompt_tokens
                 + self._compactor._total_completion_tokens
@@ -188,8 +258,15 @@ class BaseAgent:
             ctotal = (
                 f", total ${_cumulative_cost:.4f}" if _cumulative_cost > 0.01 else ""
             )
-            msg = f"[{self.name}] call #{_total_calls} ({total_all} tok, ~${cost:.4f}{cper}{ctotal}): {'; '.join(parts) if parts else ', '.join(tool_names[:5])}"
+            display = (
+                "; ".join(parts)
+                if parts
+                else ", ".join(_format_tool_names(response.tool_calls)[:6])
+            )
+            msg = f"[{self.name}] call #{_total_calls} ({total_all} tok, ~${cost:.4f}{cper}{ctotal}): {display}"
             print(msg, flush=True)
+            if trace_callback:
+                trace_callback(msg)
 
             assistant_msg = Message(
                 role=MessageRole.ASSISTANT,
@@ -216,6 +293,20 @@ class BaseAgent:
             tool_results = await self._execute_tools(response.tool_calls)
             messages.extend(tool_results)
 
+            # Show run_validate / run_metrics results
+            for i, tc in enumerate(response.tool_calls):
+                if tc.name in ("run_validate", "run_metrics"):
+                    try:
+                        result = json.loads(tool_results[i].content)
+                        res_msg = _format_tool_result(tc.name, result)
+                        if res_msg:
+                            line = f"[{self.name}]   ↳ {res_msg}"
+                            print(line, flush=True)
+                            if trace_callback:
+                                trace_callback(line)
+                    except (json.JSONDecodeError, IndexError, KeyError):
+                        pass
+
             # Check cost threshold
             if _total_writes > 0:
                 cost_per_write = _cumulative_cost / _total_writes
@@ -231,17 +322,19 @@ class BaseAgent:
                     )
 
             # Check "empty" cycle: >20 consecutive calls without writes
-            if _consecutive_noop >= 20 and _cumulative_cost > 0.05:
-                print(
-                    f"[{self.name}] ⚠ : {_consecutive_noop} callagent limit reached writes "
-                    f"(${_cumulative_cost:.4f} total )",
-                    flush=True,
+            if _consecutive_noop >= 40 and _cumulative_cost > 0.05:
+                msg_stop = (
+                    f"[{self.name}] ⚠ Idle timeout: {_consecutive_noop} calls "
+                    f"without productive output (${_cumulative_cost:.4f} spent)"
                 )
+                print(msg_stop, flush=True)
+                if trace_callback:
+                    trace_callback(msg_stop)
                 return LLMResponse(
                     content=(
-                        f"AGENT_LIMIT_REACHED — max calls exceeded, "
-                        f"connectivity 0.88,  0, agent limit reached. "
-                        f"agent limit reached. agent limit reached."
+                        f"IDLE_TIMEOUT — {_consecutive_noop} consecutive calls "
+                        f"without creating elements or relationships. "
+                        f"Stopping to save costs (${_cumulative_cost:.4f} total)."
                     ),
                     usage=LLMUsage(),
                 )
