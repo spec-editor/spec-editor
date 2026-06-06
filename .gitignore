@@ -35,6 +35,7 @@ modules/
 data_entities/
 non_functional/
 aspects/
+!examples/bookstore/aspects/
 source/
 methodology.yaml
 agents.yaml
