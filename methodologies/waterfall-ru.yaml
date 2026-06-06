@@ -1,0 +1,368 @@
+name: waterfall
+version: '1.0'
+description: 'Классическая каскадная методология разработки требований. Включает аспекты:
+  модули, сценарии, интерфейс, данные и нефункциональные требования. Два типа структурных
+  связей: consists_of (ER-композиция) и refines (уточнение/детализация).'
+aspects:
+- name: sources
+  title: Исходные требования
+  description: 'Исходные требования из внешних источников (документы, чаты, PDF).
+    Элементы-источники служат якорями трассировки: каждый элемент спецификации ссылается
+    на источник через derived_from. Источники неизменяемы — их нельзя удалить, только
+    deprecate.'
+  element_types:
+  - name: source
+    title: Исходное требование
+    attributes:
+    - name: source_file
+      type: string
+      title: Имя исходного файла
+    - name: priority
+      type: string
+      title: Приоритет (high, medium, low)
+- name: modules
+  title: Программные модули
+  description: Архитектурная декомпозиция системы на модули и компоненты. Модуль состоит
+    из компонентов (consists_of). Модули могут зависеть друг от друга (depends_on).
+  element_types:
+  - name: module
+    title: Программный модуль
+    attributes:
+    - name: responsibility
+      type: string
+      title: Зона ответственности
+    - name: technology
+      type: string
+      title: Технологический стек
+  - name: component
+    title: Компонент модуля
+    attributes:
+    - name: interface
+      type: string
+      title: Публичный интерфейс
+  relationship_types:
+  - name: consists_of
+    title: Состоит из
+    source_aspects:
+    - modules
+    target_aspects:
+    - modules
+    cardinality: 1-to-many
+  - name: depends_on
+    title: Зависит от
+    source_aspects:
+    - modules
+    target_aspects:
+    - modules
+    cardinality: many-to-many
+- name: user_scenarios
+  title: Пользовательские сценарии
+  description: 'Иерархия сценариев: цели пользователя на верхнем уровне, детальные
+    сценарии с конкретными шагами (клики, ввод данных) на нижнем. Цепочка уточнения:
+    high_level_scenario → refines → detailed_scenario → refines → step. Шаги связаны
+    последовательно (next_step) и с элементами интерфейса (interacts_with).'
+  element_types:
+  - name: high_level_scenario
+    title: Высокоуровневый сценарий
+    attributes:
+    - name: actor
+      type: string
+      title: Роль
+    - name: goal
+      type: string
+      title: Цель
+    - name: preconditions
+      type: string
+      title: Предусловия
+    - name: postconditions
+      type: string
+      title: Постусловия
+  - name: detailed_scenario
+    title: Детальный сценарий
+    attributes:
+    - name: actor
+      type: string
+      title: Роль
+  - name: step
+    title: Шаг сценария
+    attributes:
+    - name: action
+      type: string
+      title: Действие
+    - name: expected_result
+      type: string
+      title: Ожидаемый результат
+  relationship_types:
+  - name: refines
+    title: Уточняет
+    source_aspects:
+    - user_scenarios
+    target_aspects:
+    - user_scenarios
+    cardinality: 1-to-many
+  - name: next_step
+    title: Следующий шаг
+    source_aspects:
+    - user_scenarios
+    target_aspects:
+    - user_scenarios
+    cardinality: 1-to-1
+  - name: interacts_with
+    title: Взаимодействует с
+    source_aspects:
+    - user_scenarios
+    target_aspects:
+    - user_interface
+    cardinality: many-to-many
+- name: user_interface
+  title: Пользовательский интерфейс
+  description: 'Композиция интерфейса: Раздел состоит из экранов, экран из виджетов,
+    виджет из контролов (consists_of). Экраны могут ссылаться друг на друга при навигации
+    (navigates_to).'
+  element_types:
+  - name: section
+    title: Раздел интерфейса
+    attributes:
+    - name: access_roles
+      type: string
+      title: Роли с доступом
+  - name: screen
+    title: Экран
+    attributes:
+    - name: route
+      type: string
+      title: URL/путь
+  - name: widget
+    title: Виджет
+    attributes:
+    - name: data_source
+      type: string
+      title: Источник данных
+  - name: control
+    title: Контрол
+    attributes:
+    - name: control_type
+      type: string
+      title: Тип (кнопка, поле, список...)
+    - name: label
+      type: string
+      title: Текст/метка
+    - name: validation
+      type: string
+      title: Правила валидации
+  relationship_types:
+  - name: consists_of
+    title: Состоит из
+    source_aspects:
+    - user_interface
+    target_aspects:
+    - user_interface
+    cardinality: 1-to-many
+  - name: navigates_to
+    title: Переход к
+    source_aspects:
+    - user_interface
+    target_aspects:
+    - user_interface
+    cardinality: many-to-many
+- name: data_entities
+  title: Сущности данных
+  description: 'Доменная модель: сущность состоит из полей (consists_of). Сущности
+    могут ссылаться друг на друга (references).'
+  element_types:
+  - name: entity
+    title: Сущность
+    attributes:
+    - name: table_name
+      type: string
+      title: Имя таблицы БД
+  - name: field
+    title: Поле
+    attributes:
+    - name: data_type
+      type: string
+      title: Тип данных
+    - name: required
+      type: boolean
+      title: Обязательное
+    - name: unique
+      type: boolean
+      title: Уникальное
+  relationship_types:
+  - name: consists_of
+    title: Состоит из
+    source_aspects:
+    - data_entities
+    target_aspects:
+    - data_entities
+    cardinality: 1-to-many
+  - name: references
+    title: Ссылается на
+    source_aspects:
+    - data_entities
+    target_aspects:
+    - data_entities
+    cardinality: many-to-many
+- name: non_functional
+  title: Нефункциональные требования
+  description: Нефункциональные требования (производительность, безопасность, масштабируемость)
+    применяются к модулям и элементам интерфейса через связь applies_to.
+  element_types:
+  - name: requirement
+    title: Нефункциональное требование
+    attributes:
+    - name: category
+      type: string
+      title: Категория
+    - name: metric
+      type: string
+      title: Метрика
+    - name: target_value
+      type: string
+      title: Целевое значение
+  relationship_types:
+  - name: applies_to
+    title: Применяется к
+    source_aspects:
+    - non_functional
+    target_aspects:
+    - modules
+    - user_interface
+    cardinality: many-to-many
+- name: implementation
+  title: Реализация (код)
+  description: 'Трассировка требований к коду: артефакты кода, API-эндпоинты, тесты.
+    Код реализует требования (implements). Тесты проверяют требования (tested_by).'
+  element_types:
+  - name: code_artifact
+    title: Артефакт кода
+    attributes:
+    - name: file_path
+      type: string
+      title: Путь к файлу
+    - name: language
+      type: string
+      title: Язык программирования
+  - name: api_endpoint
+    title: API-эндпоинт
+    attributes:
+    - name: method
+      type: string
+      title: HTTP-метод
+    - name: route
+      type: string
+      title: Маршрут
+  - name: test_case
+    title: Тестовый сценарий
+    attributes:
+    - name: test_type
+      type: string
+      title: Тип теста
+    - name: framework
+      type: string
+      title: Фреймворк
+  relationship_types:
+  - name: implements
+    title: Реализует
+    source_aspects:
+    - implementation
+    target_aspects:
+    - modules
+    - user_scenarios
+    - user_interface
+    cardinality: many-to-many
+  - name: tested_by
+    title: Проверяется тестом
+    source_aspects:
+    - modules
+    - user_scenarios
+    - user_interface
+    target_aspects:
+    - implementation
+    cardinality: many-to-many
+- name: metrics
+  title: Бизнес-метрики и события
+  description: Бизнес-метрики (счётчики, гистограммы), структурированные события,
+    дашборды Grafana и правила алертинга. Метрики ссылаются на требования и сущности
+    через measures. Дашборды содержат метрики (contains). Алерты срабатывают на метрики
+    (triggers_on).
+  element_types:
+  - name: gauge
+    title: Метрика Prometheus
+    attributes:
+    - name: metric_type
+      type: string
+      title: Тип
+    - name: metric_name
+      type: string
+      title: Имя метрики
+    - name: help
+      type: string
+      title: Описание
+    - name: labels
+      type: string
+      title: Метки
+    - name: buckets
+      type: string
+      title: Корзины
+  - name: event
+    title: Бизнес-событие
+    attributes:
+    - name: fields
+      type: string
+      title: Поля
+    - name: level
+      type: string
+      title: Уровень
+  - name: dashboard
+    title: Дашборд Grafana
+    attributes:
+    - name: grafana_uid
+      type: string
+      title: UID дашборда
+    - name: refresh
+      type: string
+      title: Интервал обновления
+  - name: alert
+    title: Правило алертинга
+    attributes:
+    - name: severity
+      type: string
+      title: Критичность
+    - name: condition
+      type: string
+      title: PromQL-условие
+    - name: for_duration
+      type: string
+      title: Длительность
+    - name: channel
+      type: string
+      title: Канал
+  relationship_types:
+  - name: measures
+    title: Измеряет
+    source_aspects:
+    - metrics
+    target_aspects:
+    - modules
+    - data_entities
+    - non_functional
+    - user_scenarios
+    cardinality: many-to-many
+  - name: contains
+    title: Содержит
+    source_aspects:
+    - metrics
+    target_aspects:
+    - metrics
+    cardinality: 1-to-many
+  - name: triggers_on
+    title: Срабатывает на
+    source_aspects:
+    - metrics
+    target_aspects:
+    - metrics
+    cardinality: many-to-many
+skills:
+- system_analyst
+- system_analyst

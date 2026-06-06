@@ -25,8 +25,8 @@ class TestMessageProcessor:
         assert result is not None
         assert "msg_" in result.name
         assert result.exists()
-        # Check path — should be in source_raw/
-        assert "source_raw" in str(result)
+        # Check path — should be in sources_raw/
+        assert "sources_raw" in str(result)
         content = result.read_text(encoding="utf-8")
         assert "Основной чат" in content
         assert "Иван" in content
@@ -49,7 +49,7 @@ class TestMessageProcessor:
         )
         assert result is not None
         assert "attachment" in result.name
-        assert "source_raw" in str(result)
+        assert "sources_raw" in str(result)
 
 
 class TestHookConfig:

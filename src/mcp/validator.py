@@ -96,7 +96,9 @@ def validate(
                 report.fixed += 1
             else:
                 report.add_warning(
-                    element.id, "parent", f"Broken parent reference: '{element.parent}' does not exist"
+                    element.id,
+                    "parent",
+                    f"Broken parent reference: '{element.parent}' does not exist",
                 )
 
         # children
@@ -117,7 +119,11 @@ def validate(
                 report.fixed += len(removed)
             else:
                 for c in removed:
-                    report.add_warning(element.id, "children", f"Broken children reference: '{c}' does not exist")
+                    report.add_warning(
+                        element.id,
+                        "children",
+                        f"Broken children reference: '{c}' does not exist",
+                    )
 
         # relationships
         for rel_type, entries in list(element.relationships.items()):
@@ -152,7 +158,9 @@ def validate(
             try:
                 storage.write_element(element)
             except Exception as exc:
-                report.add_error(element.id, None, f"Failed to save fixed element: {exc}")
+                report.add_error(
+                    element.id, None, f"Failed to save fixed element: {exc}"
+                )
 
         # Element and relationship types (do not auto-fix)
         aspect_def = get_aspect(methodology, element.aspect)
@@ -173,6 +181,10 @@ def validate(
                 )
             valid_rels = {rt.name for rt in aspect_def.relationship_types}
             for rel_type in element.relationships:
+                # Skip provenance/traceability pseudo-relationships
+                if rel_type in ("derived_from",):
+                    continue
+
                 if rel_type not in valid_rels:
                     global_rel = get_relationship_type(methodology, rel_type)
                     if global_rel is None:

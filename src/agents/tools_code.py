@@ -117,40 +117,57 @@ async def search_code_tool(code_dir: str, pattern: str) -> dict:
 
 
 async def get_file_tree_tool(code_dir: str) -> dict:
-    """Show the project file tree."""
+    """Show the project file tree (code + spec + config files)."""
     from pathlib import Path
 
     d = Path(code_dir)
     if not d.is_dir():
         return {"error": f"Directory not found: {code_dir}"}
-    files = []
-    for f in sorted(d.rglob("*.py")):
-        files.append({"path": str(f.relative_to(d)), "size": f.stat().st_size})
-    return {"root": str(d), "files": files[:100]}
+
+    # Build a readable tree
+    tree_lines = []
+    _walk(d, tree_lines, prefix="", max_depth=4, max_items=200)
+    return {"root": str(d), "tree": "\n".join(tree_lines)}
 
 
-async def run_shell_tool(command: str, cwd: str = ".") -> dict:
-    """Execute a shell command."""
-    import subprocess
+def _walk(
+    path: "Path", lines: list, prefix: str = "", max_depth: int = 3, max_items: int = 200
+) -> None:
+    """Recursively build a tree representation."""
+    from pathlib import Path as _Path
+
+    if max_depth <= 0 or len(lines) >= max_items:
+        return
 
     try:
-        result = subprocess.run(
-            command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=cwd,
+        entries = sorted(
+            [e for e in path.iterdir() if not e.name.startswith(".")],
+            key=lambda e: (not e.is_dir(), e.name),
         )
-        return {
-            "exit_code": result.returncode,
-            "stdout": result.stdout[:2000],
-            "stderr": result.stderr[:500],
-        }
-    except subprocess.TimeoutExpired:
-        return {"error": "Command exceeded 30s timeout"}
-    except Exception as exc:
-        return {"error": str(exc)}
+    except PermissionError:
+        return
+
+    for i, entry in enumerate(entries):
+        if len(lines) >= max_items:
+            lines.append(f"{prefix}... ({max_items}+ items)")
+            return
+        is_last = i == len(entries) - 1
+        connector = "└── " if is_last else "├── "
+        if entry.is_dir():
+            lines.append(f"{prefix}{connector}{entry.name}/")
+            _walk(entry, lines, prefix + ("    " if is_last else "│   "), max_depth - 1, max_items)
+        else:
+            size = entry.stat().st_size
+            lines.append(f"{prefix}{connector}{entry.name} ({_fmt_size(size)})")
+
+
+def _fmt_size(size: int) -> str:
+    if size >= 1_000_000:
+        return f"{size / 1_000_000:.1f}MB"
+    if size >= 1_000:
+        return f"{size / 1_000:.1f}KB"
+    return f"{size}B"
+
 
 
 async def read_lints_tool(code_dir: str, file_path: str | None = None) -> dict:
@@ -269,7 +286,7 @@ def _params(props: dict, required: list[str] | None = None) -> dict:
 CODE_RO_TOOLS: list[ToolDef] = [
     ToolDef(
         name="request_helper",
-        description="Request a helper agent for parallel work. role — role (modules/UI/scenarios/data/NFR), task — specific assignment.",
+        description="[Agent] Request a helper agent for parallel work. role — role (modules/UI/scenarios/data/NFR), task — specific assignment.",
         parameters=_params(
             {
                 "role": {
@@ -286,14 +303,14 @@ CODE_RO_TOOLS: list[ToolDef] = [
     ),
     ToolDef(
         name="read_source",
-        description="Read source documents from source/ folder. No args — list files. With filename — file contents.",
+        description="[Export] Read source documents from source/ folder. No args — list files. With filename — file contents.",
         parameters=_params(
             {"filename": {"type": "string", "description": "Filename (optional)"}}
         ),
     ),
     ToolDef(
         name="search_code",
-        description="Search project code (grep). Returns matching lines.",
+        description="[Code] Search project code (grep). Returns matching lines.",
         parameters=_params(
             {
                 "code_dir": {"type": "string", "description": "Path to code directory"},
@@ -307,7 +324,7 @@ CODE_RO_TOOLS: list[ToolDef] = [
     ),
     ToolDef(
         name="get_file_tree",
-        description="Show project file structure.",
+        description="[Code] Show project file structure.",
         parameters=_params(
             {
                 "code_dir": {"type": "string", "description": "Path to code directory"},
@@ -316,19 +333,8 @@ CODE_RO_TOOLS: list[ToolDef] = [
         ),
     ),
     ToolDef(
-        name="run_shell",
-        description="Execute a shell command (tests, build, linters).",
-        parameters=_params(
-            {
-                "command": {"type": "string", "description": "Command to execute"},
-                "cwd": {"type": "string", "description": "Working directory"},
-            },
-            ["command"],
-        ),
-    ),
-    ToolDef(
         name="read_lints",
-        description="Check code for errors via ruff.",
+        description="[Code] Check code for errors via ruff.",
         parameters=_params(
             {
                 "code_dir": {"type": "string", "description": "Path to code directory"},
@@ -342,25 +348,25 @@ CODE_RO_TOOLS: list[ToolDef] = [
     ),
     ToolDef(
         name="export_srs",
-        description="Export specification to SRS format (IEEE 830). Renders all elements with their relationships and content.",
+        description="[Export] Export specification to SRS format (IEEE 830). Renders all elements with their relationships and content.",
         parameters=_params({}),
     ),
     ToolDef(
         name="compact_context",
-        description="Processing — Operation completed successfully Completed tool_calls. Operation completed successfully Operation completed successfully Operation completed successfully.",
+        description="[Agent] Compact the agent context to free memory. Call when the context becomes overloaded.",
         parameters=_params(
-            {"reason": {"type": "string", "description": "Verification complete"}}
+            {"reason": {"type": "string", "description": "Reason for compaction"}}
         ),
     ),
     ToolDef(
         name="verify_implements",
-        description="Annotate code with @implements decorators. Scans code, matches symbols to requirements by word overlap. Uses code_dir and optional file_path (for single file).",
+        description="[Code] Verify that a code file implements requirements via @implements annotations. Returns passed, implemented count, and gaps.",
         parameters=_params(
             {
                 "code_dir": {"type": "string", "description": "Path to code directory"},
                 "file_path": {
                     "type": "string",
-                    "description": "Path to code directory for analysis",
+                    "description": "Path to the code file for analysis",
                 },
             },
             ["code_dir", "file_path"],
@@ -368,13 +374,13 @@ CODE_RO_TOOLS: list[ToolDef] = [
     ),
     ToolDef(
         name="verify_traceability",
-        description="Verify requirements traceability in code. Checks @implements coverage and reports gaps.'Completed.",
+        description="[Code] Verify requirements traceability in code. Checks @implements coverage and reports gaps.",
         parameters=_params(
             {
                 "code_dir": {"type": "string", "description": "Path to code directory"},
                 "language": {
                     "type": "string",
-                    "description": "Completed (python, typescript)",
+                    "description": "Programming language (python, typescript)",
                 },
             },
             ["code_dir"],
@@ -382,13 +388,13 @@ CODE_RO_TOOLS: list[ToolDef] = [
     ),
     ToolDef(
         name="annotate_code",
-        description="Operation completed successfully Completed @implements Operation completed successfully. dry_run=True Operation completed successfully.",
+        description="[Code] Auto-annotate code with @implements decorators based on symbol names. dry_run=True shows changes without writing files.",
         parameters=_params(
             {
                 "code_dir": {"type": "string", "description": "Path to code directory"},
                 "dry_run": {
                     "type": "boolean",
-                    "description": "Operation completed successfully Processing (Processing true)",
+                    "description": "If true, show what would be changed without modifying files",
                 },
             },
             ["code_dir"],
@@ -424,7 +430,6 @@ def add_code_tools_handlers(
                 code_dir or sd, pattern
             ),
             "get_file_tree": lambda code_dir="": get_file_tree_tool(code_dir or sd),
-            "run_shell": lambda command, cwd=".": run_shell_tool(command, cwd),
             "read_lints": lambda code_dir="", file_path=None: read_lints_tool(
                 code_dir or sd, file_path
             ),

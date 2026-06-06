@@ -3,10 +3,36 @@
 Launch: spec-editor mcp-server [-p <project>]
 Connects third-party MCP clients (Cursor, Aider, Claude Desktop, Zed) to storage.
 Supports project switching via the switch_project tool.
+
+IMPORTANT: structlog must be configured BEFORE any project imports,
+because module-level get_logger() calls trigger auto-configuration
+that defaults to stdout (PrintLogger). We reconfigure to use stdlib
+loggers + stderr so JSON-RPC on stdout stays clean.
 """
 
-import json
+# ── Configure logging FIRST, before any project imports ──
+import logging
 import sys
+
+# Wipe any handlers set during CLI bootstrap
+for handler in logging.root.handlers[:]:
+    logging.root.removeHandler(handler)
+logging.basicConfig(stream=sys.stderr, level=logging.ERROR, format="%(message)s")
+
+# Force structlog to route through stdlib loggers (→ stderr), not PrintLogger (→ stdout)
+import structlog
+
+structlog.configure(
+    processors=[
+        structlog.stdlib.add_log_level,
+        structlog.dev.ConsoleRenderer(colors=False),
+    ],
+    wrapper_class=structlog.stdlib.BoundLogger,
+    logger_factory=structlog.stdlib.LoggerFactory(),
+)
+
+# ── Now safe to import project modules that call get_logger() ──
+import json
 from pathlib import Path
 
 import click
@@ -21,12 +47,6 @@ from src.storage.filesystem import FilesystemStorage
 def mcp_server(path: str | None) -> None:
     """Start MCP server. -p is optional, can be switched via switch_project."""
     _state = {"storage": None, "handlers": {}, "source_dir": "", "project_path": ""}
-
-    # JSON-RPC must be clean on stdout — all logging to stderr
-    import logging, sys
-    for handler in logging.root.handlers[:]:
-        logging.root.removeHandler(handler)
-    logging.basicConfig(stream=sys.stderr, level=logging.ERROR, format="%(message)s")
 
     if path:
         _init_state(_state, Path(path).resolve())
@@ -46,7 +66,7 @@ def mcp_server(path: str | None) -> None:
             _respond(
                 req_id,
                 {
-                    "protocolVersion": "0.1",
+                    "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}},
                     "serverInfo": {"name": "spec-editor-mcp", "version": "1.0"},
                 },
@@ -105,11 +125,14 @@ def _build_schemas() -> list:
     ] + [
         {
             "name": "switch_project",
-            "description": "Initialise a new project with a methodology. path — directory with existing methodology.yaml.",
+            "description": "[Project] Switch to a different project by path. Requires existing methodology.yaml in the target directory.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Path to project directory"}
+                    "path": {
+                        "type": "string",
+                        "description": "Path to project directory",
+                    }
                 },
                 "required": ["path"],
             },

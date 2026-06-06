@@ -108,7 +108,7 @@ class TestSourcePreprocessor:
         from src.ingestion.preprocessor import SourcePreprocessor
 
         source_dir = tmp_path / "project"
-        raw_dir = source_dir / "source_raw"
+        raw_dir = source_dir / "sources_raw"
         raw_dir.mkdir(parents=True)
         (raw_dir / "req1.txt").write_text("Добавить экспорт в PDF")
 
@@ -145,7 +145,7 @@ class TestSourcePreprocessor:
         from src.ingestion.preprocessor import SourcePreprocessor
 
         source_dir = tmp_path / "project"
-        raw_dir = source_dir / "source_raw"
+        raw_dir = source_dir / "sources_raw"
         raw_dir.mkdir(parents=True)
         (raw_dir / "spam.txt").write_text("Привет! Как дела?")
 

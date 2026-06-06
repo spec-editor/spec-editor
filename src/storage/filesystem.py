@@ -101,7 +101,7 @@ class FilesystemStorage(StorageAdapter):
 
         # Remove from parent's children
         try:
-            element = parse_md_file(path)
+            element = parse_md_file(self._aspects_path / path)
             if element.parent:
                 self._remove_from_parent_children(element.id, element.parent)
         except Exception:
@@ -197,7 +197,7 @@ class FilesystemStorage(StorageAdapter):
 
         for element_id, path in self._index.items():
             try:
-                element = parse_md_file(path)
+                element = parse_md_file(self._aspects_path / path)
             except Exception:
                 continue
 

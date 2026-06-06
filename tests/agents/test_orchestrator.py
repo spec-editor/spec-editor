@@ -117,8 +117,8 @@ class TestDialogueOrchestrator:
         decision, _ = orch.evaluate(1, 20, history)
         assert decision == OrchestratorDecision.CONTINUE  # overridden!
 
-    def test_warning_on_round_limit(self):
-        """When round limit is reached — warning."""
+    def test_round_limit_stops(self):
+        """When round limit is reached — complete."""
         from src.agents.dialogue import DialogueOrchestrator
 
         history = [_msg("A1", "work"), _msg("A2", "work")]
@@ -128,4 +128,4 @@ class TestDialogueOrchestrator:
             methodology=None,
         )
         decision, _ = orch.evaluate(20, 20, history)
-        assert decision == OrchestratorDecision.WARNING
+        assert decision == OrchestratorDecision.COMPLETE

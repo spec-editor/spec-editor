@@ -241,7 +241,7 @@ class FactExtractor:
 
 @implements("MOD-007-C2")
 class SourcePreprocessor:
-    """Scans the source_raw/ folder, filters spam, extracts requirements.
+    """Scans the sources_raw/ folder, filters spam, extracts requirements.
 
     Results are saved to source/ (clean .txt files).
     """
@@ -253,7 +253,7 @@ class SourcePreprocessor:
         classifier: RequirementClassifier,
         extractor: FactExtractor,
     ):
-        self._raw_dir = Path(source_dir) / "source_raw"
+        self._raw_dir = Path(source_dir) / "sources_raw"
         self._output_dir = Path(output_dir) / "source"
         self._classifier = classifier
         self._extractor = extractor
@@ -351,7 +351,7 @@ class SourcePreprocessor:
 
     @implements("SRC-011")
     def process(self) -> list[ProcessedFile]:
-        """Process all unread files in source_raw/.
+        """Process all unread files in sources_raw/.
 
         Groups messages by day, classifies in batches.
         """

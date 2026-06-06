@@ -3,7 +3,7 @@
 from enum import Enum
 
 from src.agents.base import BaseAgent
-from src.agents.prompts import ORCHESTRATOR_SYSTEM_PROMPT
+from src.agents.prompts import get_orchestrator_prompt
 from src.agents.tools import build_read_only_handlers, get_tool_definitions
 from src.config.methodology import Methodology, format_methodology
 from src.providers.base import LLMProvider, LLMResponse, Message, MessageRole
@@ -32,7 +32,7 @@ class OrchestratorAgent(BaseAgent):
     ) -> None:
         tools = get_tool_definitions(writable=False)
         tool_handlers = build_read_only_handlers(storage, methodology, source_dir)
-        system_prompt = ORCHESTRATOR_SYSTEM_PROMPT.format(
+        system_prompt = get_orchestrator_prompt().format(
             methodology_description=format_methodology(methodology),
         )
         super().__init__(

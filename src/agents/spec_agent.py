@@ -1,7 +1,7 @@
 """Requirements developer agent (Agent 1 / Agent 2)."""
 
 from src.agents.base import BaseAgent
-from src.agents.prompts import SPEC_AGENT_SYSTEM_PROMPT
+from src.agents.prompts import get_spec_agent_prompt
 from src.agents.role import AgentRole
 from src.agents.tools import build_all_handlers, get_tool_definitions
 from src.config.methodology import Methodology, format_methodology
@@ -40,7 +40,7 @@ class SpecAgent(BaseAgent):
         system_prompt = (
             role.prompt.format(methodology_description=methodology_text)
             if role.prompt
-            else SPEC_AGENT_SYSTEM_PROMPT.format(
+            else get_spec_agent_prompt().format(
                 methodology_description=methodology_text
             )
         )

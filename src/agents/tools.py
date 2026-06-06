@@ -3,7 +3,8 @@
 from pathlib import Path
 from typing import Any, Callable
 
-from src.config.methodology import Methodology
+from src.config.methodology import Methodology, get_aspect
+from src.context.builder import ContextBuilder
 from src.mcp.metrics import MetricsReport, compute_metrics
 from src.mcp.validator import ValidationReport, validate
 from src.providers.base import ToolDef
@@ -94,6 +95,13 @@ async def get_methodology_tool(methodology: Methodology) -> dict:
     }
 
 
+async def get_context_for_file_tool(storage, file_path: str) -> dict:
+    """Build spec context for a code file (MCP tool handler)."""
+    builder = ContextBuilder(storage)
+    ctx = builder.for_file(Path(file_path))
+    return {"context": ctx}
+
+
 async def run_validate_tool(storage: StorageAdapter, methodology: Methodology) -> dict:
     """Run MCP validation."""
     report: ValidationReport = validate(storage, methodology, fix=True)
@@ -113,6 +121,7 @@ async def run_metrics_tool(storage: StorageAdapter) -> dict:
 
 async def write_element_tool(
     storage: StorageAdapter,
+    methodology: Methodology,
     aspect: str,
     element_type: str,
     id: str,
@@ -127,6 +136,23 @@ async def write_element_tool(
     derived_from: list[str] | None = None,
 ) -> dict:
     """Create a new or update an existing specification element."""
+    # Validate aspect and element_type against methodology
+    aspect_def = get_aspect(methodology, aspect)
+    if aspect_def is None:
+        valid_aspects = [a.name for a in methodology.aspects]
+        return {
+            "status": "error",
+            "element_id": id,
+            "message": f"Unknown aspect '{aspect}'. Valid aspects: {', '.join(valid_aspects)}",
+        }
+    valid_types = [et.name for et in aspect_def.element_types]
+    if element_type not in valid_types:
+        return {
+            "status": "error",
+            "element_id": id,
+            "message": f"Unknown element_type '{element_type}' in aspect '{aspect}'. Valid types: {', '.join(valid_types)}",
+        }
+
     try:
         rel_entries: dict[str, list[RelationshipEntry]] = {}
         if relationships:
@@ -300,7 +326,7 @@ def _params(props: dict, required: list[str] | None = None) -> dict:
 RO_TOOLS: list[ToolDef] = [
     ToolDef(
         name="read_element",
-        description="Read an element by ID. Returns aspect, element_type, title, status, parent, children, relationships, content.",
+        description="[Spec] Read an element by ID. Returns aspect, element_type, title, status, parent, children, relationships, content.",
         parameters=_params(
             {"element_id": {"type": "string", "description": "Element ID"}},
             ["element_id"],
@@ -308,7 +334,7 @@ RO_TOOLS: list[ToolDef] = [
     ),
     ToolDef(
         name="list_aspect",
-        description="List all elements of an aspect.",
+        description="[Spec] List all elements of an aspect.",
         parameters=_params(
             {"aspect_name": {"type": "string", "description": "Aspect name"}},
             ["aspect_name"],
@@ -316,19 +342,19 @@ RO_TOOLS: list[ToolDef] = [
     ),
     ToolDef(
         name="list_all_elements",
-        description="List all project elements.",
+        description="[Spec] List all project elements.",
         parameters=_params({}),
     ),
     ToolDef(
         name="search_elements",
-        description="Full-text search by ID, title, and content.",
+        description="[Spec] Full-text search by ID, title, and content.",
         parameters=_params(
             {"query": {"type": "string", "description": "Search query"}}, ["query"]
         ),
     ),
     ToolDef(
         name="find_related",
-        description="Find elements related to the specified one.",
+        description="[Spec] Find elements related to the specified one.",
         parameters=_params(
             {"element_id": {"type": "string", "description": "Element ID"}},
             ["element_id"],
@@ -336,18 +362,28 @@ RO_TOOLS: list[ToolDef] = [
     ),
     ToolDef(
         name="get_methodology",
-        description="Get the methodology description.",
+        description="[Spec] Get the methodology description.",
         parameters=_params({}),
     ),
     ToolDef(
         name="run_validate",
-        description="Run MCP specification validation.",
+        description="[Spec] Run MCP specification validation.",
         parameters=_params({}),
     ),
     ToolDef(
         name="run_metrics",
-        description="Compute connectivity metrics.",
+        description="[Spec] Compute connectivity metrics.",
         parameters=_params({}),
+    ),
+    ToolDef(
+        name="get_context_for_file",
+        description="[Spec] Build specification context for a code file. Parses @implements annotations and loads referenced requirements with related elements.",
+        parameters=_params(
+            {
+                "file_path": {"type": "string", "description": "Path to the code file"},
+            },
+            ["file_path"],
+        ),
     ),
 ]
 
@@ -485,6 +521,9 @@ def build_read_only_handlers(
         "get_methodology": lambda: get_methodology_tool(methodology),
         "run_validate": lambda: run_validate_tool(storage, methodology),
         "run_metrics": lambda: run_metrics_tool(storage),
+        "get_context_for_file": lambda file_path="": get_context_for_file_tool(
+            storage, file_path
+        ),
     }
     add_question_tools_handlers(handlers, sd)
     add_code_tools_handlers(
@@ -515,7 +554,9 @@ def build_all_handlers(
     )
     handlers.update(
         {
-            "write_element": lambda **kw: write_element_tool(storage, **kw),
+            "write_element": lambda **kw: write_element_tool(
+                storage, methodology, **kw
+            ),
             "delete_element": lambda element_id: delete_element_tool(
                 storage, element_id
             ),

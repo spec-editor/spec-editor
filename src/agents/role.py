@@ -1,6 +1,10 @@
 """Agent role — prompt, tools, write permissions."""
 
-from src.agents.prompts import ORCHESTRATOR_SYSTEM_PROMPT, SPEC_AGENT_SYSTEM_PROMPT
+from src.agents.prompts import (
+    get_cross_aspect_prompt,
+    get_orchestrator_prompt,
+    get_spec_agent_prompt,
+)
 from src.config.skills import Skill
 from src.tracing import implements
 
@@ -9,6 +13,7 @@ class AgentRole:
     """Agent role: name, prompt, tool set, write permissions.
 
     Created either directly or from Skill + default_prompt.
+    Prompt is loaded lazily via get_*_prompt() to support runtime language switching.
     """
 
     def __init__(
@@ -44,12 +49,17 @@ class AgentRole:
     @classmethod
     def spec_agent(cls, name: str = "spec_agent") -> "AgentRole":
         """Standard role of a requirements developer agent."""
-        return cls(name=name, writable=True, prompt=SPEC_AGENT_SYSTEM_PROMPT)
+        return cls(name=name, writable=True, prompt=get_spec_agent_prompt())
+
+    @classmethod
+    def cross_aspect_agent(cls, name: str = "cross_aspect") -> "AgentRole":
+        """Cross-aspect relationship agent — only creates connections between aspects."""
+        return cls(name=name, writable=True, prompt=get_cross_aspect_prompt())
 
     @classmethod
     @implements("MOD-001-C3")
     def orchestrator(cls) -> "AgentRole":
         """Orchestrator role — read-only."""
         return cls(
-            name="orchestrator", writable=False, prompt=ORCHESTRATOR_SYSTEM_PROMPT
+            name="orchestrator", writable=False, prompt=get_orchestrator_prompt()
         )

@@ -1,3 +1,9 @@
+# Spec Editor CI — template for YOUR project
+# Copy to: your-project/.github/workflows/spec-editor.yml
+#
+# This workflow validates your specification on every push and PR.
+# Requires: source/ directory with requirements, aspects/ with spec.
+
 name: Spec Editor CI
 
 on:
@@ -6,14 +12,8 @@ on:
     paths:
       - 'source/**'
       - 'aspects/**'
-      - 'src/**'
-      - 'prompts/**'
   pull_request:
     branches: [main]
-    paths:
-      - 'source/**'
-      - 'aspects/**'
-      - 'src/**'
 
 jobs:
   validate:
@@ -30,12 +30,9 @@ jobs:
 
       - name: Validate specification
         run: spec-editor validate -p .
-        env:
-          SPEC_EDITOR_PROJECT: .
 
-      - name: Check specification metrics
-        run: |
-          spec-editor status -p . || true
+      - name: Check metrics
+        run: spec-editor status -p . || true
 
   traceability:
     runs-on: ubuntu-latest
@@ -50,14 +47,6 @@ jobs:
       - name: Install spec-editor
         run: pip install spec-editor
 
-      - name: Verify code traceability
+      - name: Verify traceability
         run: spec-editor verify-traceability -p . -c ./src -l python
         continue-on-error: true
-
-      - name: Check coverage threshold
-        run: |
-          COVERAGE=$(spec-editor status -p . --json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('coverage_ratio',0))" || echo "0")
-          echo "Coverage: $COVERAGE"
-          if [ "$(echo "$COVERAGE < 0.8" | bc)" = "1" ]; then
-            echo "::warning::Traceability coverage below 80%: $COVERAGE"
-          fi

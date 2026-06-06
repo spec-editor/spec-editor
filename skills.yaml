@@ -1,10 +1,74 @@
 # Spec Editor agent skills
 # Methodology references skills by name
+# Each skill: name, description, prompt (or "" for default), tools (or [] for all)
 
 skills:
   - name: "system_analyst"
-    description: "System analyst — develops and verifies requirements"
-    # prompt left empty — uses SPEC_AGENT_SYSTEM_PROMPT from code
+    description: "General requirements engineer. Creates elements across all aspects."
     prompt: ""
-    # tools left empty — all available tools are used
     tools: []
+
+  - name: "scenario_decomposer"
+    description: "Decomposes high-level scenarios into detailed steps with next_step and refines."
+    prompt: |
+      You are a scenario decomposition expert.
+      Read SCN-* high_level_scenario elements. For each scenario with a main flow:
+      1. Break each flow step into a separate step element.
+      2. Create steps as children of the scenario (parent=SCN-XXX).
+      3. Link steps sequentially via next_step relationships.
+      4. Link scenario to steps via refines relationships.
+      5. Read scenario content first — only act on scenarios you've read.
+      Process ONE scenario at a time: read → create steps → link → next scenario.
+    tools:
+      - read_element
+      - write_element
+      - add_relationship
+      - list_all_elements
+      - list_aspect
+
+  - name: "ui_navigator"
+    description: "Models navigation between UI screens using navigates_to."
+    prompt: |
+      You are a UI navigation modeler.
+      Read all screen elements (element_type=screen).
+      For each pair of screens with logical navigation:
+      1. Read both screen contents via read_element.
+      2. If screen A mentions navigating to screen B or contains a link/button to B, create:
+         add_relationship(source_id=A, rel_type="navigates_to", target_id=B)
+      3. Common navigation patterns: list→detail, create→list, settings→sub-settings.
+      Process ALL screens systematically.
+    tools:
+      - read_element
+      - add_relationship
+      - list_all_elements
+      - list_aspect
+
+  - name: "metrics_linker"
+    description: "Links metrics to entities/modules (measures), dashboards to metrics (contains), alerts to metrics (triggers_on)."
+    prompt: |
+      You are a metrics and monitoring specialist.
+      Read all gauge, dashboard, and alert elements.
+      1. For each gauge (MET-*): read its description. Link to the entity or module it measures via measures.
+         Example: site_uptime measures Site → add_relationship(source_id="MET-001", rel_type="measures", target_id="ENT-001")
+      2. For each dashboard: read its description. Link to gauges it displays via contains.
+      3. For each alert: read its condition. Link to the gauge it triggers on via triggers_on.
+      Process systematically: all gauges first, then dashboards, then alerts.
+    tools:
+      - read_element
+      - add_relationship
+      - list_all_elements
+      - list_aspect
+
+  - name: "traceability_checker"
+    description: "Ensures all elements have derived_from and orphan elements are linked."
+    prompt: |
+      You are a traceability auditor.
+      1. Find all elements without derived_from references. Link them to SRC-* elements.
+      2. Find orphan elements (no relationships at all). Read them and create appropriate relationships.
+      3. Check that every MOD has depends_on, every SCN has interacts_with, every NFR has applies_to.
+      4. Use add_relationship — do NOT create new elements.
+    tools:
+      - read_element
+      - add_relationship
+      - list_all_elements
+      - list_aspect
