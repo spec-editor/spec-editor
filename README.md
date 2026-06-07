@@ -6,29 +6,26 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-blue.svg" alt="Apache 2.0"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+"></a>
-  <a href="tests/"><img src="https://img.shields.io/badge/tests-336-green.svg" alt="336 tests"></a>
-  <a href="#early-stage"><img src="https://img.shields.io/badge/version-v0.2_alpha-orange.svg" alt="v0.2 alpha"></a>
+  <a href="tests/"><img src="https://img.shields.io/badge/tests-360-green.svg" alt="360 tests"></a>
 </p>
 
-> [!WARNING]
-> **Early stage.** Spec Editor is under active development. Prompts are shipped
-> as sensible defaults — you'll get better results by customising them for your
-> domain, methodology, and preferred LLM. See [Help Wanted](#help-wanted) below
-> if you'd like to contribute better prompts.
+<p align="center">
+  <a href="docs/demo.gif">▶ Watch the demo (GIF)</a>
+</p>
 
 ---
 
 ## What is Spec Editor?
 
 Spec Editor turns messy requirements documents into structured specifications
-using multiple AI agents in a structured dialogue. It also verifies that your
-code actually implements the requirements — bidirectional traceability from
-document to code and back.
+using multiple AI agents in a structured dialogue. Then it connects to your
+AI coding agent (Claude Code, Cursor, Zed) via MCP so your generated code
+stays aligned with your requirements.
 
 **It is:**
 - A CLI tool that generates specifications via multi-agent debate
-- A code annotator that links source code to requirements (`@implements`)
 - An MCP server so external AI agents can read your specification
+- A code annotator that links source code to requirements (`@implements`)
 - A code generator that creates skeletons from spec elements (SQLAlchemy, FastAPI, React, pytest)
 
 **It is NOT:**
@@ -38,62 +35,92 @@ document to code and back.
 
 > [!NOTE]
 > Spec Editor works with any OpenAI-compatible API (DeepSeek, OpenAI, Anthropic).
-> Default: DeepSeek ($0.14/M tokens) — 100× cheaper than GPT-4.
+> Default: DeepSeek ($0.14/M tokens).
 
 ---
 
 ## Why Not Just Prompt an LLM Directly?
 
-| What happens | The problem |
-|-------------|-------------|
-| Single perspective | LLM agrees with itself — no critical challenge |
-| No adversarial review | Edge cases, security gaps, contradictions missed |
-| Freeform output | Hard to version, diff, or audit |
-| Ephemeral sessions | Context lost between runs |
-| No code traceability | Requirements rot — nobody knows what's implemented |
+A raw LLM prompt produces superficial, flat requirements. Spec Editor's
+multi-agent debate and methodology-driven structure produce deeply
+connected specifications — much better than what any single LLM prompt
+can achieve.
 
-**Spec Editor solves this by:**
-- Running **multiple agents** with different viewpoints in structured rounds
-- Supporting **blind voting** — agents respond without seeing each other
-- **Methodology-driven aspects** — waterfall decomposes into modules, scenarios, UI, data, NFR, metrics, implementation; agile uses backlog and sprints
-- **Skill-based specialisation** — agents spawn helpers with focused prompts for scenario decomposition, UI navigation, metrics linking
-- Producing **version-controlled artifacts** in git (markdown + YAML)
-- Persisting **session history** for incremental runs
-- Linking code to requirements via **@implements** annotations
+| What happens with raw LLM | What spec-editor does |
+|---|---|
+| Single perspective | Multi-agent debate with structured rounds |
+| No adversarial review | Agents challenge each other — edge cases, contradictions caught |
+| Freeform output | Methodology-driven: modules, scenarios, UI, data, NFR, metrics |
+| Ephemeral session | Version-controlled artifacts in git (Markdown + YAML) |
+| No code traceability | Bidirectional `@implements` links — know what's implemented |
 
 ---
 
 ## Quick Start
 
-> **See it in action:** `spec-editor demo` — opens a pre-generated spec in your browser.
-> No API key needed. 5 seconds.
-
 ```bash
-# Install
 pip install spec-editor
 
-# Create a new project
-spec-editor init my-project --methodology waterfall
+# 1. Instant preview (no API key)
+spec-editor demo              # opens pre-generated spec in browser
 
-# Drop a requirements document in source/
-echo "Users should be able to log in with email and password" > my-project/source/login.md
+# 2. Create project and run agents
+spec-editor init my-project   # creates project structure
+cd my-project
+echo "# Your requirements..." > source/readme.md
+spec-editor run               # needs DEEPSEEK_API_KEY in .env
 
-# Run the agents
-cd my-project && spec-editor run
+# 3. Connect to your AI coding agent
+spec-editor mcp &             # start MCP server in background
+# Add the MCP config to your agent (see below)
 
-# Check what was generated
-spec-editor status
-
-# Annotate your code with @implements
-spec-editor annotate --code-dir ./src --language python
-
-# Verify traceability
-spec-editor verify-traceability --code-dir ./src --language python
+# 4. Export to shareable format
+spec-editor export -f html    # styled HTML report
+spec-editor export -f srs     # IEEE 830 Markdown
+spec-editor validate          # check methodology compliance
 ```
 
 After `spec-editor run` completes, you'll have:
-- `aspects/` — structured specification in markdown + YAML frontmatter
+- `aspects/` — structured specification in Markdown + YAML frontmatter
 - `source/session_summary.md` — what the agents did and why
+
+---
+
+## Connect to AI Coding Assistants (MCP)
+
+Spec Editor runs an MCP server for any MCP-compatible agent
+(Zed, Cursor, Claude Code, Windsurf, etc.).
+
+```bash
+spec-editor mcp &   # start in background
+```
+
+Add to your agent's MCP config (`.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "spec-editor": {
+      "command": "spec-editor",
+      "args": ["mcp", "-p", "/absolute/path/to/project"]
+    }
+  }
+}
+```
+
+### What Your Agent Gets
+
+| Tool | Description |
+|------|-------------|
+| `get_context_for_file` | Spec context for a code file via `@implements` |
+| `search_elements` | Full-text search across requirements |
+| `read_element` | Read any specification element by ID |
+| `list_all_elements` | Browse entire specification |
+
+Add `@implements("REQ-ID")` decorators to your code — the agent
+automatically pulls linked requirements into its context.
+
+Full API reference: [readme_mcp.md](readme_mcp.md)
 
 ---
 
@@ -123,9 +150,9 @@ After `spec-editor run` completes, you'll have:
 │  │       │   debate    │               │                     │
 │  │       ▼             ▼               │                     │
 │  │  ┌─────────────────────────────┐    │                     │
-│  │  │  Blind voting (optional)    │    │                     │
-│  │  │  4 strategies: CONSENSUS,   │    │                     │
-│  │  │  MAJORITY, WEIGHTED, DEBATE │    │                     │
+│  │  │  Skill-based helpers        │    │                     │
+│  │  │  scenario_decomposer,       │    │                     │
+│  │  │  ui_navigator, metrics_linker   │                     │
 │  │  └─────────────────────────────┘    │                     │
 │  └─────────────────┬───────────────────┘                     │
 │                    ▼                                          │
@@ -152,17 +179,13 @@ After `spec-editor run` completes, you'll have:
 | Feature | Description |
 |---------|-------------|
 | **Multi-agent dialogue** | 2 agents + orchestrator debate requirements in structured rounds |
-| **Blind voting** | Agents respond independently, preventing anchoring bias (from spec2ship) |
-| **4 voting strategies** | CONSENSUS, MAJORITY, WEIGHTED, DEBATE + adaptive auto-select |
-| **Ingestion pipeline** | PDF, Telegram, voice → SRC (Source Requirement Candidates) |
+| **Skill-based helpers** | Agents spawn specialised helpers: scenario decomposer, UI navigator, metrics linker, traceability checker |
+| **Methodology-driven** | Waterfall decomposes into 8 aspects: modules, scenarios, UI, data, NFR, metrics, implementation, sources |
+| **MCP server** | 19 tools — external AI agents read your specification for context-aware code generation |
 | **Code annotation** | `@implements("REQ-001")` — link code to requirements automatically |
-| **Traceability verification** | Check coverage: "87% of confirmed requirements have @implements" |
-| **AST-based parsers** | 7 languages via tree-sitter (Python, TS, JS, Go, Java, Kotlin, Rust) |
 | **Code generation** | Jinja2 templates: SQLAlchemy, FastAPI, pytest, React, TypeScript |
-| **MCP server** | 19 tools — external AI agents read/write your specification |
-| **Incremental runs** | `--since 2026-05-01` — process only new/changed source documents |
-| **Session persistence** | `session.json` + `session_summary.md` — full audit trail |
-| **Git-native** | Everything is markdown + YAML in git — version, diff, merge, blame |
+| **Export formats** | SRS (IEEE 830), TRLC (BMW), OpenAPI 3.0, Jira CSV, styled HTML |
+| **Git-native** | Everything is Markdown + YAML in git — version, diff, merge, blame |
 
 ---
 
@@ -173,16 +196,14 @@ element types, and relationships.
 
 | Methodology | What it generates | Status |
 |-------------|-------------------|--------|
-| **waterfall** | Full spec: modules, scenarios, UI, data, non-functional, implementation, metrics (7 aspects) | ✅ Free (OSS) |
-| **agile** | Sprint backlog: epics → user stories → acceptance criteria + INVEST validator + Jira CSV | ✅ |
-| **scrum** | Agile + sprints (goal, capacity, focus factor, velocity, DoD) | ✅ |
-| **kanban** | Agile + workflow stages (WIP limits, cycle time, throughput) | ✅ |
-| **api-first** | OpenAPI 3.0 contract (service → endpoint → schema + auth) | ✅ |
+| **waterfall** | Full spec: modules, scenarios, UI, data, non-functional, implementation, metrics, sources | ✅ Free (OSS) |
+| **agile** | Sprint backlog: epics → user stories → acceptance criteria + Jira CSV | ✅ Paid |
+| **scrum** | Agile + sprints (goal, capacity, focus factor, velocity, DoD) | ✅ Paid |
+| **kanban** | Agile + workflow stages (WIP limits, cycle time, throughput) | ✅ Paid |
+| **api-first** | OpenAPI 3.0 contract (service → endpoint → schema + auth) | ✅ Paid |
 
-> [!TIP]
 > `waterfall` is free and bundled with the OSS release.
-> `agile`, `scrum`, `kanban`, `api-first` are **Methodology Packs** (paid, $99–149 each).
-> See [spec-editor.com](https://spec-editor.com) for details.
+> Agile, scrum, kanban, and api-first are Methodology Packs (coming soon).
 
 ---
 
@@ -223,18 +244,18 @@ public UserResponse getUser(Long id) { ... }
 ## CLI Commands
 
 ```bash
-spec-editor init ./my-project --methodology waterfall    # Create project
-spec-editor run -p ./my-project                          # Run agent dialogue
-spec-editor status -p ./my-project                       # Show spec status
-spec-editor validate -p ./my-project                     # Validate specification
-spec-editor export -p ./my-project --format trlc         # Export to TRLC format
+spec-editor demo                         # Instant preview (no API key)
+spec-editor init ./my-project            # Create project
+spec-editor run -p ./my-project          # Run agent dialogue
+spec-editor view -p ./my-project         # Interactive Mermaid graph
+spec-editor validate -p ./my-project     # Validate specification
+spec-editor status -p ./my-project       # Show spec status
+spec-editor export -p ./my-project       # Export to SRS/TRLC/OpenAPI/Jira/HTML
+spec-editor mcp                          # Start MCP server (19 tools)
 
-spec-editor annotate -p ./my-project --code-dir ./src -l python   # Annotate code
-spec-editor verify-traceability -p ./my-project -c ./src -l go    # Verify coverage
-spec-editor codegen -p ./my-project --output ./generated          # Generate code skeletons
-
-spec-editor mcp                                           # Start MCP server (19 tools)
-spec-editor questions                                     # Manage agent questions
+spec-editor annotate -p . -c ./src -l python           # Annotate code
+spec-editor verify-traceability -p . -c ./src -l go    # Verify coverage
+spec-editor codegen -p . --output ./generated           # Generate code skeletons
 ```
 
 ---
@@ -243,6 +264,7 @@ spec-editor questions                                     # Manage agent questio
 
 ```bash
 spec-editor export -p .                            # SRS document (default)
+spec-editor export -p . -f html -o spec.html       # Styled HTML with relationships
 spec-editor export -p . -f trlc -o spec.trlc       # TRLC (BMW-compatible)
 spec-editor export -p . -f openapi -o api.yaml     # OpenAPI 3.0
 spec-editor export -p . -f jira -o backlog.csv     # Jira CSV import
@@ -251,6 +273,7 @@ spec-editor export -p . -f jira -o backlog.csv     # Jira CSV import
 | Format | CLI flag | Output | Use case |
 |--------|----------|--------|----------|
 | **SRS (IEEE 830)** | `-f srs` (default) | Markdown | Stakeholder-ready specification |
+| **HTML** | `-f html` | `spec.html` | Styled report with relationship traces |
 | **TRLC** (BMW) | `-f trlc` | `.trlc` file | Requirements as code |
 | **OpenAPI 3.0** | `-f openapi` | `openapi.yaml` | API contracts from api-first |
 | **Jira CSV** | `-f jira` | `.csv` file | Sprint backlog for Jira import |
@@ -266,99 +289,28 @@ Edit `agents.yaml` to choose your provider:
 agents:
   agent_1:
     provider: deepseek     # or openai, anthropic
-    model: deepseek-reasoner
+    model: deepseek/deepseek-reasoner
     temperature: 0.7
   agent_2:
     provider: deepseek
-    model: deepseek-reasoner
+    model: deepseek/deepseek-reasoner
     temperature: 0.7
   orchestrator:
     provider: deepseek
-    model: deepseek-reasoner
+    model: deepseek/deepseek-reasoner
 ```
 
-Set `SPEC_EDITOR__LOG_LEVEL=DEBUG` for verbose output including tool calls.
-
 ---
 
-## Dependencies
-
-**Runtime:** Python 3.11+, Pydantic 2.x, LiteLLM, Jinja2, PyYAML,
-Click, Rich, Structlog, python-frontmatter, tree-sitter, tree-sitter-languages.
-
-**Optional:** pytest (for running tests), ruff (for linting).
-
-Install all: `pip install spec-editor`
-
----
-
-
-## Help Wanted
+## Contributing
 
 Prompts are the engine of Spec Editor. Better prompts = better specifications.
 
-**We need help with:**
-- **Language packs** — translations that sound native, not machine-translated. Current languages: EN, RU, ES, FR, DE. Missing your language? Add `prompts/xx.yaml` and open a PR.
-- **LLM-specific tuning** — DeepSeek, GPT-4, and Claude each respond differently to the same prompt. If you've tuned prompts for your preferred model, share them.
-- **Few-shot examples** — examples are now included in all language prompts. Help us add more domain-specific examples for your industry.
+- **Language packs** — translations for EN, RU, ES, FR, DE. Missing your language? Add `prompts/xx.yaml` and open a PR.
+- **LLM-specific tuning** — DeepSeek, GPT-4, Claude each respond differently. Share your tuned prompts.
+- **Few-shot examples** — help us add domain-specific examples.
 
-**How to contribute prompts:**
-1. Fork the repo
-2. Edit `prompts/{lang}.yaml` or add a new language file
-3. Run `pytest tests/test_prompt_loader.py` to verify format variables are consistent
-4. Open a PR with a before/after comparison of agent output
-
-All prompt contributions are credited in the changelog. Good prompts make everyone's specs better.
-
-Got ideas beyond prompts? **Open an issue** with your feature request, or
-**submit a PR** directly — we review everything.
-
-
-
-## Using Spec Editor with AI Coding Assistants
-
-Spec Editor runs an MCP server accessible to any MCP-compatible agent
-(Zed, Cursor, Claude Desktop, Aider, Windsurf, etc.).
-Connect it and your coding agent gains access to your specification
-for context-aware code generation.
-
-### Quick Setup
-
-```bash
-spec-editor init my-project && cd my-project
-cp ~/docs/requirements.md source/
-spec-editor run          # agents generate the specification
-spec-editor mcp -p . &   # start MCP server in background
-```
-
-### Connect Your Agent
-
-Add to your agent's MCP config (`.mcp.json`, `mcp.json`, or agent settings):
-
-```json
-{
-  "mcpServers": {
-    "spec-editor": {
-      "command": "spec-editor",
-      "args": ["mcp", "-p", "/absolute/path/to/project"]
-    }
-  }
-}
-```
-
-### What Your Agent Gets
-
-| Tool | Description |
-|------|-------------|
-| `get_context_for_file` | Spec context for a code file via `@implements` annotations |
-| `search_elements` | Full-text search across requirements |
-| `read_element` | Read any specification element by ID |
-| `list_all_elements` | Browse entire specification |
-
-Add `@implements("REQ-ID")` decorators to your code — the agent
-automatically pulls linked requirements into its context.
-
-Full API reference: [readme_mcp.md](readme_mcp.md)
+Got ideas? **Open an issue** or **submit a PR** — we review everything.
 
 ---
 
@@ -366,10 +318,10 @@ Full API reference: [readme_mcp.md](readme_mcp.md)
 
 - [Quickstart](docs/QUICKSTART.md) — 5-minute setup
 - [Architecture](docs/ARCHITECTURE.md) — pipeline, components, CLI reference
+- [MCP API Reference](readme_mcp.md) — MCP server tools
 - [Contributing Prompts](docs/CONTRIBUTING_PROMPTS.md) — how to improve agent quality
 - [CONTRIBUTING.md](CONTRIBUTING.md) — code contributions
 - [CHANGELOG.md](CHANGELOG.md) — release history
-- [readme_mcp.md](readme_mcp.md) — MCP server API reference
 
 ---
 
@@ -378,5 +330,4 @@ Full API reference: [readme_mcp.md](readme_mcp.md)
 Apache 2.0 — see [LICENSE](LICENSE).
 
 The core engine (`spec-editor`) is free and open source.
-Methodology Packs (`agile`, `scrum`, `kanban`, `api-first`) are source-available,
-purchased separately.
+Methodology Packs are source-available, purchased separately.

@@ -63,3 +63,6 @@ source_raw/*
 !source_raw/.gitkeep
 backend/
 run.log
+docs/demo.cast
+docs/demo.html
+docs/demo.tape
