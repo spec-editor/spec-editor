@@ -66,3 +66,6 @@ run.log
 docs/demo.cast
 docs/demo.html
 docs/demo.tape
+
+# Agent skills (personal)
+.agents/
