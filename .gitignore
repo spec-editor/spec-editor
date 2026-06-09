@@ -67,5 +67,8 @@ docs/demo.cast
 docs/demo.html
 docs/demo.tape
 
+# Landing page (moved to spec-editor.github.io)
+index.html
+
 # Agent skills (personal)
 .agents/
