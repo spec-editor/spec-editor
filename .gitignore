@@ -36,8 +36,10 @@ data_entities/
 non_functional/
 aspects/
 !data/examples/bookstore/aspects/
+!data/examples/bookstore/aspects/**
 source/
 methodology.yaml
+!data/methodology.yaml
 agents.yaml
 
 # Test
