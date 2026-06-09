@@ -1,6 +1,6 @@
 <p align="center">
   <h1 align="center">Spec Editor</h1>
-  <h3 align="center">Multi-agent requirements generation for AI coding assistants</h3>
+  <h3 align="center">AI-powered requirements engineering with methodology support</h3>
 </p>
 
 <p align="center">

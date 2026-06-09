@@ -2,22 +2,13 @@
 
 Get from zero to a structured specification in 5 minutes.
 
-## 1. Instant preview (no API key)
-
-```bash
-spec-editor demo
-```
-
-Opens a pre-generated bookstore specification in your browser.
-See what the output looks like before you run anything.
-
-## 2. Install
+## 1. Install
 
 ```bash
 pip install spec-editor
 ```
 
-## 3. Create a project
+## 2. Create a project
 
 ```bash
 spec-editor init my-project --with-example
@@ -26,7 +17,7 @@ cd my-project
 
 This creates a project with a sample requirements document in `source/readme.md`.
 
-## 4. Run the agents
+## 3. Run the agents
 
 ```bash
 spec-editor run
@@ -38,13 +29,22 @@ data models, UI, metrics, and non-functional requirements.
 
 > **Requires API key.** Set `DEEPSEEK_API_KEY` in `.env` or environment.
 
-## 5. See the result
+## 4. See the result
 
 ```bash
 spec-editor view     # Interactive graph in browser
 spec-editor status   # Summary table
 spec-editor validate # Check for errors
 ```
+
+## 5. Try the demo (no API key needed)
+
+```bash
+spec-editor demo
+```
+
+Opens a pre-generated bookstore specification in your browser.
+See what the output looks like before you run the agents.
 
 ## 6. Connect to your AI coding agent
 
