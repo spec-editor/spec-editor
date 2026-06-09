@@ -25,7 +25,6 @@ stays aligned with your requirements.
 **It is:**
 - A CLI tool that generates specifications via multi-agent debate
 - An MCP server so external AI agents can read your specification
-- A code annotator that links source code to requirements (`@implements`)
 - A code generator that creates skeletons from spec elements (SQLAlchemy, FastAPI, React, pytest)
 
 **It is NOT:**
@@ -52,7 +51,6 @@ can achieve.
 | No adversarial review | Agents challenge each other — edge cases, contradictions caught |
 | Freeform output | Methodology-driven: modules, scenarios, UI, data, NFR, metrics |
 | Ephemeral session | Version-controlled artifacts in git (Markdown + YAML) |
-| No code traceability | Bidirectional `@implements` links — know what's implemented |
 
 ---
 
@@ -161,17 +159,9 @@ Full API reference: [readme_mcp.md](readme_mcp.md)
 │  │  aspects/modules/    MOD-001.md     │                     │
 │  │  aspects/scenarios/  SCN-001.md     │                     │
 │  │  aspects/entities/   ENT-001.md     │                     │
-│  └─────────────────┬───────────────────┘                     │
-│                    ▼                                          │
-│  ┌─────────────────────────────────────┐                     │
-│  │       CODE TRACEABILITY              │                     │
-│  │  @implements("MOD-001")              │                     │
-│  │  class AuthModule: ...               │                     │
-│  │                                      │                     │
-│  │  7 languages: Python, TS, JS,        │                     │
-│  │  Go, Java, Kotlin, Rust              │                     │
 │  └─────────────────────────────────────┘                     │
 └──────────────────────────────────────────────────────────────┘
+
 ```
 
 ### Key Features
@@ -179,11 +169,9 @@ Full API reference: [readme_mcp.md](readme_mcp.md)
 | Feature | Description |
 |---------|-------------|
 | **Multi-agent dialogue** | 2 agents + orchestrator debate requirements in structured rounds |
-| **Skill-based helpers** | Agents spawn specialised helpers: scenario decomposer, UI navigator, metrics linker, traceability checker |
+| **Skill-based helpers** | Agents spawn specialised helpers: scenario decomposer, UI navigator, metrics linker |
 | **Methodology-driven** | Waterfall decomposes into 8 aspects: modules, scenarios, UI, data, NFR, metrics, implementation, sources |
-| **MCP server** | 19 tools — external AI agents read your specification for context-aware code generation |
-| **Code annotation** | `@implements("REQ-001")` — link code to requirements automatically |
-| **Code generation** | Jinja2 templates: SQLAlchemy, FastAPI, pytest, React, TypeScript |
+| **MCP server** | 19 tools — connect to Claude Code, Cursor, Zed for context-aware code generation |
 | **Export formats** | SRS (IEEE 830), TRLC (BMW), OpenAPI 3.0, Jira CSV, styled HTML |
 | **Git-native** | Everything is Markdown + YAML in git — version, diff, merge, blame |
 
@@ -207,40 +195,6 @@ element types, and relationships.
 
 ---
 
-## Code Traceability (7 Languages)
-
-```python
-# @implements("MOD-001")                     ← annotation
-class AuthModule:                            ← symbol
-    def login(self, email, password): ...
-```
-
-```go
-// @implements("SCN-001")
-func LoginUser(email, password string) error { ... }
-```
-
-```rust
-// @implements("ENT-001")
-pub struct User { pub id: i64, pub name: String }
-```
-
-```java
-@Implements("API-001")
-public UserResponse getUser(Long id) { ... }
-```
-
-| Language | Parser | Annotation style |
-|----------|--------|-----------------|
-| Python | `ast` (stdlib) | `@implements(...)` decorator or comment |
-| TypeScript / JS | `tree-sitter` | `@Implements(...)` decorator or `// @implements(...)` |
-| Go | `tree-sitter` | `// @implements(...)` comment |
-| Java | `tree-sitter` | `@Implements(...)` annotation or `// @implements(...)` |
-| Kotlin | `tree-sitter` | `@Implements(...)` annotation or `// @implements(...)` |
-| Rust | `tree-sitter` | `// @implements(...)` comment |
-
----
-
 ## CLI Commands
 
 ```bash
@@ -252,10 +206,6 @@ spec-editor validate -p ./my-project     # Validate specification
 spec-editor status -p ./my-project       # Show spec status
 spec-editor export -p ./my-project       # Export to SRS/TRLC/OpenAPI/Jira/HTML
 spec-editor mcp                          # Start MCP server (19 tools)
-
-spec-editor annotate -p . -c ./src -l python           # Annotate code
-spec-editor verify-traceability -p . -c ./src -l go    # Verify coverage
-spec-editor codegen -p . --output ./generated           # Generate code skeletons
 ```
 
 ---
