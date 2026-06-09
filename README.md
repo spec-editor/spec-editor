@@ -1,6 +1,6 @@
 <p align="center">
   <h1 align="center">Spec Editor</h1>
-  <h3 align="center">AI-powered requirements engineering with bidirectional code traceability</h3>
+  <h3 align="center">Multi-agent requirements generation for AI coding assistants</h3>
 </p>
 
 <p align="center">
@@ -65,7 +65,7 @@ spec-editor demo              # opens pre-generated spec in browser
 # 2. Create project and run agents
 spec-editor init my-project   # creates project structure
 cd my-project
-echo "# Your requirements..." > source/readme.md
+# Put your requirements in source/ — or use --with-example
 spec-editor run               # needs DEEPSEEK_API_KEY in .env
 
 # 3. Connect to your AI coding agent
