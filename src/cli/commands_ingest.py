@@ -223,11 +223,37 @@ def analyze_cmd(path: str, file: str, auto_apply: bool) -> None:
     default=None,
     envvar="SPEC_EDITOR_PROJECT",
     type=click.Path(exists=True),
-    help="Path to code directory",
+    help="Path to project directory",
+)
+@click.option(
+    "--transport",
+    default="stdio",
+    type=click.Choice(["stdio", "http"]),
+    help="Transport: stdio (default) or http",
+)
+@click.option(
+    "--port",
+    default=8001,
+    type=int,
+    help="HTTP port (default: 8001)",
+)
+@click.option(
+    "--read-only",
+    is_flag=True,
+    default=False,
+    help="Register only read-only tools (HTTP only)",
+)
+@click.option(
+    "--host",
+    default="127.0.0.1",
+    type=str,
+    help="HTTP host to bind to (default: 127.0.0.1)",
 )
 @implements("SRC-007")
 @implements("MOD-003")
-def mcp(path: str | None) -> None:
+def mcp(
+    path: str | None, transport: str, port: int, read_only: bool, host: str
+) -> None:
     """Start MCP server for external agents (stdio/json-rpc).
 
     MCP is configured in your AI agent, not in spec-editor.
@@ -245,22 +271,32 @@ def mcp(path: str | None) -> None:
       }
     }
     """
+    import sys
+
     from src.mcp.server import mcp_server as _server
 
-    import sys
     proj = path or "."
-    print(
-        "[spec-editor] MCP server starting...",
-        "[spec-editor] This is not a command you run directly.",
-        "[spec-editor] MCP is configured in your AI agent — connect it with:",
-        f'  {{"mcpServers": {{"spec-editor": {{"command": "spec-editor", "args": ["mcp", "-p", "{proj}"]}}}}}}',
-        "[spec-editor] See README: https://github.com/spec-editor/spec-editor#using-spec-editor-with-ai-coding-assistants",
-        "[spec-editor] Waiting for agent connection... (Ctrl+C to stop)",
-        sep="\n",
-        file=sys.stderr,
-    )
 
-    _server.callback(proj if proj != "." else None)
+    if transport == "stdio":
+        print(
+            "[spec-editor] MCP server starting...",
+            "[spec-editor] This is not a command you run directly.",
+            "[spec-editor] MCP is configured in your AI agent — connect it with:",
+            f'  {{"mcpServers": {{"spec-editor": {{"command": "spec-editor", "args": ["mcp", "-p", "{proj}"]}}}}}}',
+            "[spec-editor] See README: https://github.com/spec-editor/spec-editor#using-spec-editor-with-ai-coding-assistants",
+            "[spec-editor] Waiting for agent connection... (Ctrl+C to stop)",
+            sep="\n",
+            file=sys.stderr,
+        )
+    # HTTP transport prints its own banner (host:port, read-only status)
+
+    _server(
+        path=proj if proj != "." else None,
+        transport=transport,
+        port=port,
+        read_only=read_only,
+        host=host,
+    )
 
 
 # ---------------------------------------------------------------------------
