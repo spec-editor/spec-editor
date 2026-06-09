@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spec Editor — AI-powered requirements engineering</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+/* ── Reset & Vars ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;
+  --bg-card:#161b22;
+  --bg-elevated:#1c2129;
+  --border:#30363d;
+  --text:#c9d1d9;
+  --text-dim:#8b949e;
+  --accent:#58a6ff;
+  --accent-glow:rgba(88,166,255,0.15);
+  --green:#3fb950;
+  --green-bg:rgba(63,185,80,0.15);
+  --yellow:#d2991d;
+  --yellow-bg:rgba(210,153,29,0.15);
+  --radius:8px;
+  --font:"Inter",system-ui,sans-serif;
+  --mono:"JetBrains Mono",monospace;
+}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font);
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── Layout ── */
+.wrap{max-width:960px;margin:0 auto;padding:0 24px}
+section{padding:80px 0}
+
+/* ── Hero ── */
+.hero{
+  padding:100px 0 60px;
+  text-align:center;
+  border-bottom:1px solid var(--border);
+}
+.hero h1{
+  font-size:56px;
+  font-weight:700;
+  letter-spacing:-0.02em;
+  line-height:1.1;
+  margin-bottom:16px;
+  background:linear-gradient(135deg,#58a6ff,#a371f7);
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  background-clip:text;
+}
+.hero .subtitle{
+  font-size:20px;
+  color:var(--text-dim);
+  font-weight:400;
+  max-width:600px;
+  margin:0 auto 40px;
+}
+.hero .cta-row{
+  display:flex;
+  gap:12px;
+  justify-content:center;
+  flex-wrap:wrap;
+  margin-bottom:48px;
+}
+.btn{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:12px 28px;
+  border-radius:var(--radius);
+  font-family:var(--font);
+  font-size:15px;
+  font-weight:600;
+  text-decoration:none;
+  cursor:pointer;
+  border:none;
+  transition:all .2s;
+}
+.btn-accent{
+  background:var(--accent);
+  color:#fff;
+}
+.btn-accent:hover{background:#79b8ff;transform:translateY(-1px)}
+.btn-ghost{
+  background:transparent;
+  color:var(--text);
+  border:1px solid var(--border);
+}
+.btn-ghost:hover{background:var(--bg-elevated);border-color:var(--text-dim)}
+
+.gif-frame{
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  overflow:hidden;
+  max-width:700px;
+  margin:0 auto;
+  box-shadow:0 0 60px var(--accent-glow);
+}
+.gif-frame img{width:100%;display:block}
+
+/* ── Features ── */
+.features{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  gap:24px;
+}
+.feature{
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:32px;
+  transition:border-color .2s;
+}
+.feature:hover{border-color:var(--accent)}
+.feature .icon{font-size:28px;margin-bottom:16px}
+.feature h3{font-size:18px;font-weight:600;margin-bottom:8px;color:#fff}
+.feature p{color:var(--text-dim);font-size:15px}
+
+/* ── How it works ── */
+.steps{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+  gap:24px;
+  counter-reset:step;
+}
+.step{
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:32px;
+  position:relative;
+  counter-increment:step;
+}
+.step::before{
+  content:counter(step);
+  position:absolute;
+  top:-14px;
+  left:24px;
+  width:32px;
+  height:32px;
+  background:var(--accent);
+  color:#fff;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:700;
+  font-size:14px;
+  font-family:var(--mono);
+}
+.step h4{font-size:15px;font-weight:600;margin:8px 0 4px;color:#fff}
+.step code{
+  font-family:var(--mono);
+  font-size:13px;
+  background:var(--bg-elevated);
+  padding:2px 8px;
+  border-radius:4px;
+  color:var(--accent);
+}
+.step p{color:var(--text-dim);font-size:14px;margin-top:8px}
+
+/* ── Support ── */
+.support{
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:48px;
+  text-align:center;
+}
+.support h2{margin-bottom:16px}
+.support .packs{
+  display:flex;
+  gap:12px;
+  justify-content:center;
+  flex-wrap:wrap;
+  margin:24px 0 16px;
+}
+.pack-badge{
+  font-family:var(--mono);
+  font-size:12px;
+  padding:6px 16px;
+  border-radius:20px;
+  border:1px solid var(--border);
+  color:var(--text-dim);
+}
+.bonus{
+  margin:24px 0;
+  padding:20px;
+  background:var(--yellow-bg);
+  border:1px solid var(--yellow);
+  border-radius:var(--radius);
+  display:inline-block;
+}
+.bonus .emoji{font-size:20px}
+.bonus strong{color:var(--yellow)}
+.bonus span{color:var(--text-dim);font-size:14px}
+
+/* ── Footer ── */
+footer{
+  padding:32px 0;
+  border-top:1px solid var(--border);
+  text-align:center;
+  color:var(--text-dim);
+  font-size:14px;
+}
+footer a{color:var(--accent);text-decoration:none}
+footer a:hover{text-decoration:underline}
+
+/* ── Section headings ── */
+.sec-label{
+  font-family:var(--mono);
+  font-size:12px;
+  text-transform:uppercase;
+  letter-spacing:0.08em;
+  color:var(--accent);
+  margin-bottom:8px;
+}
+h2{font-size:32px;font-weight:700;margin-bottom:12px;letter-spacing:-0.01em}
+.sec-desc{color:var(--text-dim);margin-bottom:40px;font-size:16px;max-width:600px}
+
+/* ── Responsive ── */
+@media(max-width:640px){
+  .hero h1{font-size:36px}
+  .hero .subtitle{font-size:17px}
+  section{padding:48px 0}
+  .support{padding:32px 24px}
+  h2{font-size:26px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ════════ Hero ════════ -->
+<section class="hero">
+  <h1>Spec Editor</h1>
+  <p class="subtitle">
+    AI-powered requirements engineering with methodology support.
+    Multi-agent debate produces structured specifications —
+    not flat lists, but connected graphs.
+  </p>
+  <div class="cta-row">
+    <a href="docs/demo.gif" class="btn btn-ghost">▶ Watch demo</a>
+    <a href="https://github.com/spec-editor/spec-editor" class="btn btn-accent">★ Star on GitHub</a>
+  </div>
+  <div class="gif-frame">
+    <img src="docs/demo.gif" alt="Spec Editor demo">
+  </div>
+</section>
+
+<!-- ════════ Features ════════ -->
+<section>
+  <div class="sec-label">Why Spec Editor</div>
+  <h2>Not just another LLM prompt</h2>
+  <p class="sec-desc">
+    A raw LLM produces flat bullet points. Spec Editor runs agents
+    in structured debate to produce deeply connected specifications.
+  </p>
+  <div class="features">
+    <div class="feature">
+      <div class="icon">⚡</div>
+      <h3>Multi-agent debate</h3>
+      <p>
+        Two agents + orchestrator discuss your requirements
+        from different angles. They challenge each other,
+        catch gaps, and build consensus.
+      </p>
+    </div>
+    <div class="feature">
+      <div class="icon">🧩</div>
+      <h3>Methodology-driven</h3>
+      <p>
+        Not a flat list — modules, scenarios, entities,
+        UI, metrics. All connected with typed relationships.
+        Waterfall by default, more methodologies available.
+      </p>
+    </div>
+    <div class="feature">
+      <div class="icon">🔌</div>
+      <h3>MCP for coding assistants</h3>
+      <p>
+        Connect to Claude Code, Cursor, or Zed via MCP.
+        Your AI coding agent gets full spec context —
+        code that aligns with your requirements.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ How it works ════════ -->
+<section>
+  <div class="sec-label">Quick Start</div>
+  <h2>How it works</h2>
+  <p class="sec-desc">Three steps from messy requirements to structured spec.</p>
+  <div class="steps">
+    <div class="step">
+      <h4>Drop your requirements</h4>
+      <code>echo "Users should log in..." &gt; source/login.md</code>
+      <p>Any format: Markdown, TXT, chat logs. Put them in source/.</p>
+    </div>
+    <div class="step">
+      <h4>Run the agents</h4>
+      <code>spec-editor run</code>
+      <p>Agents debate and produce a structured specification in aspects/.</p>
+    </div>
+    <div class="step">
+      <h4>Connect to your IDE</h4>
+      <code>spec-editor mcp &amp;</code>
+      <p>Claude Code, Cursor, or Zed now reads your spec for context.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ Support ════════ -->
+<section>
+  <div class="sec-label">Support the project</div>
+  <h2>Methodology Packs</h2>
+  <p class="sec-desc">
+    The core engine is free and open source. Support ongoing
+    development by purchasing a methodology pack tailored to your domain.
+  </p>
+  <div class="support">
+    <div class="packs">
+      <span class="pack-badge">Agile / Scrum</span>
+      <span class="pack-badge">Kanban</span>
+      <span class="pack-badge">API-first</span>
+      <span class="pack-badge">Regulatory</span>
+    </div>
+    <p style="color:var(--text-dim);font-size:14px">
+      Backlog-driven sprints · OpenAPI contracts · GDPR/SOC2/HIPAA compliance
+    </p>
+
+    <div class="bonus">
+      <span class="emoji">🎁</span>
+      <strong>Early supporter bonus:</strong>
+      <span>all supporters will get access to Spec Visualizer — interactive
+      requirement diagrams (beta, coming soon).</span>
+    </div>
+
+    <div style="margin-top:24px">
+      <a href="https://gumroad.com/l/spec-editor-methodology" class="btn btn-accent">
+        $49 — Buy a methodology pack
+      </a>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<!-- ════════ Footer ════════ -->
+<footer>
+  <div class="wrap">
+    Free &amp; open source ·
+    <a href="https://github.com/spec-editor/spec-editor">github.com/spec-editor/spec-editor</a>
+    · Apache 2.0
+  </div>
+</footer>
+</body>
+</html>
