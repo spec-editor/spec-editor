@@ -159,7 +159,19 @@ Full API reference: [readme_mcp.md](readme_mcp.md)
 │  │  aspects/modules/    MOD-001.md     │                     │
 │  │  aspects/scenarios/  SCN-001.md     │                     │
 │  │  aspects/entities/   ENT-001.md     │                     │
-│  └─────────────────────────────────────┘                     │
+│  └──────────────────┬──────────────────┘                     │
+│                     ▼                                        │
+│  ┌──────────────────────────────────────┐                    │
+│  │           MCP SERVER                  │                    │
+│  │  19 tools — read_element,            │                    │
+│  │  search_elements, list_aspect, ...   │                    │
+│  └──────────────────┬───────────────────┘                    │
+│                     ▼                                        │
+│  ┌──────────────────────────────────────┐                    │
+│  │     AI CODING AGENTS                  │                    │
+│  │  Claude Code · Cursor · Zed · ...    │                    │
+│  │  Code with full spec context          │                    │
+│  └──────────────────────────────────────┘                    │
 └──────────────────────────────────────────────────────────────┘
 
 ```
