@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spec-editor"
-version = "0.1.0"
+version = "0.1.8"
 description = "Automated requirements engineering system with AI agents"
-readme = "Product/source/readme.md"
-license = {text = "Apache-2.0"}
+readme = "README.md"
+license = "Apache-2.0"
 requires-python = ">=3.11"
 authors = [
     {name = "Spec Editor Team"},
@@ -23,8 +23,9 @@ dependencies = [
     "structlog>=24.0",
     "pyyaml>=6.0",
     "jinja2>=3.0",
-    "tree-sitter>=0.21,<0.25",
-    "tree-sitter-languages>=1.9,<2.0",
+    "markdown>=3.5",
+    "tree-sitter>=0.21,<0.22",
+    "tree-sitter-languages==1.9.1",
 ]
 
 [project.optional-dependencies]
@@ -41,7 +42,11 @@ spec-editor = "src.main:cli"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src*"]
+include = ["src*", "data*", "data/**/*"]
+
+[tool.setuptools.package-data]
+data = ["**/*"]
+src = ["codegen/templates/*.j2"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

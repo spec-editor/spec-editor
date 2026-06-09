@@ -37,7 +37,9 @@ class TestRegulatoryMethodology:
 
     def test_loads_without_errors(self):
         """Bundled regulatory.yaml is valid YAML and Pydantic model."""
-        path = Path(__file__).parent.parent / "methodologies" / "regulatory.yaml"
+        from importlib import resources
+
+        path = resources.files("data") / "methodologies" / "regulatory.yaml"
         if not path.exists():
             path = (
                 Path(__file__).parent.parent.parent

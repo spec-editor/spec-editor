@@ -5,11 +5,12 @@ Use set_prompt_language() to switch languages at runtime.
 Use get_spec_agent_prompt() / get_orchestrator_prompt() for lazy loading.
 """
 
+from importlib import resources
 from pathlib import Path
 
 from src.config.prompt_loader import PromptLoader
 
-_PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
+_PROMPTS_DIR = resources.files("data") / "prompts"
 _loader = PromptLoader(_PROMPTS_DIR, language="en")
 
 

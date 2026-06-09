@@ -35,7 +35,7 @@ modules/
 data_entities/
 non_functional/
 aspects/
-!examples/bookstore/aspects/
+!data/examples/bookstore/aspects/
 source/
 methodology.yaml
 agents.yaml
@@ -69,6 +69,7 @@ docs/demo.tape
 
 # Landing page (moved to spec-editor.github.io)
 index.html
+landing/
 
 # Agent skills (personal)
 .agents/

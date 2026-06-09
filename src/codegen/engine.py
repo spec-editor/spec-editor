@@ -145,7 +145,9 @@ class CodeGenerator:
     @staticmethod
     def _load_default_config() -> dict:
         """Load the default codegen.yaml from the project root."""
-        config_path = Path(__file__).parent.parent.parent / "codegen.yaml"
+        from importlib import resources
+
+        config_path = resources.files("data") / "codegen.yaml"
         if config_path.exists():
             with open(config_path, encoding="utf-8") as f:
                 root = yaml.safe_load(f) or {}

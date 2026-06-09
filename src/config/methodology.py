@@ -165,7 +165,9 @@ class MethodologyManager:
 
     def __init__(self, methodologies_dir: Path | None = None):
         if methodologies_dir is None:
-            methodologies_dir = Path(__file__).parent.parent.parent / "methodologies"
+            from importlib import resources
+
+            methodologies_dir = resources.files("data") / "methodologies"
         self._methodologies_dir = methodologies_dir
 
     @property

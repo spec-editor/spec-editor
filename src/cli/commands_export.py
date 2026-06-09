@@ -89,7 +89,9 @@ def export(
         if not template:
             template = project_path / "srs_template.yaml"
             if not template.exists():
-                template = Path(__file__).parent.parent.parent / "srs_template.yaml"
+                from importlib import resources
+
+                template = resources.files("data") / "srs_template.yaml"
         _export_srs(storage, project_path, output, str(template))
 
 

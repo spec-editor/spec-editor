@@ -3,6 +3,7 @@
 import shutil
 import tempfile
 import webbrowser
+from importlib import resources
 from pathlib import Path
 
 import click
@@ -81,7 +82,7 @@ def demo(output: str | None) -> None:
     import sys
 
     # Find bundled bookstore example
-    examples_dir = Path(__file__).parent.parent.parent / "examples" / "bookstore"
+    examples_dir = resources.files("data") / "examples" / "bookstore"
     if not examples_dir.is_dir():
         console.print("[red]Bookstore example not found[/red]")
         raise SystemExit(1)
@@ -97,7 +98,7 @@ def demo(output: str | None) -> None:
     shutil.copytree(examples_dir, demo_dir)
 
     # Copy methodology.yaml for validate/export/run commands
-    builtin_methods = Path(__file__).parent.parent.parent / "methodologies"
+    builtin_methods = resources.files("data") / "methodologies"
     method_file = builtin_methods / "waterfall.yaml"
     if method_file.exists():
         shutil.copy(method_file, demo_dir / "methodology.yaml")

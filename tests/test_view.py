@@ -13,7 +13,9 @@ class TestMermaidRenderer:
 
     @pytest.fixture
     def bookstore_project(self) -> Path:
-        return Path(__file__).parent.parent / "examples" / "bookstore"
+        from importlib import resources
+
+        return resources.files("data") / "examples" / "bookstore"
 
     @pytest.fixture
     def renderer(self) -> MermaidRenderer:
@@ -21,7 +23,9 @@ class TestMermaidRenderer:
 
     # --- Mermaid diagram generation ---
 
-    def test_renders_elements_as_nodes(self, renderer: MermaidRenderer, bookstore_project: Path) -> None:
+    def test_renders_elements_as_nodes(
+        self, renderer: MermaidRenderer, bookstore_project: Path
+    ) -> None:
         """Each element becomes a Mermaid graph node."""
         mermaid = renderer.build_mermaid(bookstore_project)
 
@@ -31,7 +35,9 @@ class TestMermaidRenderer:
         assert "NFR-001" in mermaid
         assert "SCN-001" in mermaid
 
-    def test_renders_relationships_as_edges(self, renderer: MermaidRenderer, bookstore_project: Path) -> None:
+    def test_renders_relationships_as_edges(
+        self, renderer: MermaidRenderer, bookstore_project: Path
+    ) -> None:
         """Relationships become graph edges."""
         mermaid = renderer.build_mermaid(bookstore_project)
 
@@ -39,13 +45,17 @@ class TestMermaidRenderer:
         assert "MOD-001" in mermaid
         assert "-->" in mermaid  # Mermaid edge syntax
 
-    def test_graph_is_valid_mermaid(self, renderer: MermaidRenderer, bookstore_project: Path) -> None:
+    def test_graph_is_valid_mermaid(
+        self, renderer: MermaidRenderer, bookstore_project: Path
+    ) -> None:
         """Output starts with graph directive."""
         mermaid = renderer.build_mermaid(bookstore_project)
         lines = mermaid.strip().split("\n")
         assert lines[0].startswith("graph ")
 
-    def test_nodes_have_labels(self, renderer: MermaidRenderer, bookstore_project: Path) -> None:
+    def test_nodes_have_labels(
+        self, renderer: MermaidRenderer, bookstore_project: Path
+    ) -> None:
         """Nodes include element titles as labels."""
         mermaid = renderer.build_mermaid(bookstore_project)
         assert "Book Catalog" in mermaid
@@ -59,7 +69,9 @@ class TestMermaidRenderer:
 
     # --- HTML generation ---
 
-    def test_generates_html_file(self, renderer: MermaidRenderer, bookstore_project: Path, tmp_path: Path) -> None:
+    def test_generates_html_file(
+        self, renderer: MermaidRenderer, bookstore_project: Path, tmp_path: Path
+    ) -> None:
         """Writes self-contained HTML with Mermaid CDN."""
         output = tmp_path / "spec.html"
         path = renderer.render_html(bookstore_project, output)
@@ -70,7 +82,9 @@ class TestMermaidRenderer:
         assert "mermaid" in content.lower()
         assert "MOD-001" in content
 
-    def test_html_is_self_contained(self, renderer: MermaidRenderer, bookstore_project: Path, tmp_path: Path) -> None:
+    def test_html_is_self_contained(
+        self, renderer: MermaidRenderer, bookstore_project: Path, tmp_path: Path
+    ) -> None:
         """HTML loads Mermaid from CDN, no local files needed."""
         output = tmp_path / "spec.html"
         path = renderer.render_html(bookstore_project, output)

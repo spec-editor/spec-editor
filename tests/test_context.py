@@ -9,11 +9,13 @@ from src.storage.filesystem import FilesystemStorage
 
 
 class TestContextBuilder:
-    """Building spec context from code files and task queries."""
+    """ContextBuilder: building context for AI coding agents."""
 
     @pytest.fixture
     def bookstore(self) -> Path:
-        return Path(__file__).parent.parent / "examples" / "bookstore"
+        from importlib import resources
+
+        return resources.files("data") / "examples" / "bookstore"
 
     @pytest.fixture
     def storage(self, bookstore: Path) -> FilesystemStorage:
@@ -123,7 +125,9 @@ class TestSmartContext:
 
     @pytest.fixture
     def bookstore(self) -> Path:
-        return Path(__file__).parent.parent / "examples" / "bookstore"
+        from importlib import resources
+
+        return resources.files("data") / "examples" / "bookstore"
 
     @pytest.fixture
     def builder(self, bookstore: Path) -> ContextBuilder:

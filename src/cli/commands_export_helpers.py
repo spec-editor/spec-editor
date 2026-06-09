@@ -17,14 +17,14 @@ from src.storage.filesystem import FilesystemStorage
 
 def _export_html(storage, project_path, output):
     """Export to styled HTML using srs_style.j2 template."""
-    from pathlib import Path
+    from importlib import resources
 
     from src.export.pipeline import pipeline_from_config
 
     # SRS template YAML (section structure) for the gatherer
-    srs_tpl = Path(__file__).parent.parent.parent / "srs_template.yaml"
+    srs_tpl = resources.files("data") / "srs_template.yaml"
     # Jinja2 HTML template for the formatter
-    html_tpl = Path(__file__).parent.parent.parent / "srs_style.j2"
+    html_tpl = resources.files("data") / "srs_style.j2"
 
     cfg = {
         "gatherer": "srs",

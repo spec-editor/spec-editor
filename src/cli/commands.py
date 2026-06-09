@@ -1,6 +1,7 @@
 """CLI commands for spec-editor."""
 
 import shutil
+from importlib import resources
 from pathlib import Path
 
 import click
@@ -23,7 +24,7 @@ from src.tracing import implements
 logger = get_logger(__name__)
 console = Console()
 
-_BUILTIN_METHODOLOGIES = Path(__file__).parent.parent.parent / "methodologies"
+_BUILTIN_METHODOLOGIES = resources.files("data") / "methodologies"
 
 _README_TEMPLATE = """\
 # Project Description

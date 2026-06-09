@@ -221,7 +221,9 @@ def run(
 
     # Reload methodology in detected language for agents
     if detected_lang == "ru":
-        ru_path = Path(__file__).parent.parent / "methodologies" / "waterfall-ru.yaml"
+        from importlib import resources
+
+        ru_path = resources.files("data") / "methodologies" / "waterfall-ru.yaml"
         if ru_path.exists():
             method = load_methodology(ru_path)
             console.print("[dim]Using Russian methodology (waterfall-ru.yaml)[/dim]")
@@ -285,7 +287,7 @@ def run(
                 for s in all_elements:
                     try:
                         full = storage.read_element(s.id)
-                        for rt in (full.relationships or {}):
+                        for rt in full.relationships or {}:
                             rel_counts[rt] += len(full.relationships[rt])
                     except Exception:
                         pass
@@ -293,7 +295,7 @@ def run(
                 # Collect all cross-aspect relationship types from methodology
                 cross_aspect_rels = {}
                 for aspect in method.aspects:
-                    for rt in (aspect.relationship_types or []):
+                    for rt in aspect.relationship_types or []:
                         cross_aspect_rels[rt.name] = {
                             "title": rt.title,
                             "sources": rt.source_aspects,
@@ -306,7 +308,17 @@ def run(
                     count = rel_counts.get(rname, 0)
                     if count == 0:
                         sparse.append((rname, rinfo, "MISSING"))
-                    elif rname in ("interacts_with", "applies_to", "implements", "measures", "references") and count < 5:
+                    elif (
+                        rname
+                        in (
+                            "interacts_with",
+                            "applies_to",
+                            "implements",
+                            "measures",
+                            "references",
+                        )
+                        and count < 5
+                    ):
                         sparse.append((rname, rinfo, f"only {count}"))
 
                 if sparse:
@@ -323,9 +335,7 @@ def run(
                         tgt = ", ".join(rinfo["targets"])
                         skill = skill_map.get(rname, "")
                         hint = f" (spawn {skill} helper)" if skill else ""
-                        lines.append(
-                            f"  {rname}: {status} — {src} → {tgt}{hint}"
-                        )
+                        lines.append(f"  {rname}: {status} — {src} → {tgt}{hint}")
                     task_lines = "\n".join(lines)
                     initial_task = (
                         f"All methodology aspects have elements: {existing_str}.\n\n"
