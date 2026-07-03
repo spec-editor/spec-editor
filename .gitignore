@@ -85,7 +85,7 @@ skills.yaml                     # Copied from data/skills.yaml by spec-editor in
 # ──────────────────────────────────────────────────────────────
 # Ingestion pipeline output
 # ──────────────────────────────────────────────────────────────
-ingestion/
+/ingestion/
 
 # ──────────────────────────────────────────────────────────────
 # Source raw documents
