@@ -216,3 +216,5 @@ packages/jetbrains-extension/.gradle/
 # Node modules — never commit
 # ──────────────────────────────────────────────────────────────
 node_modules/
+docs/QA_PLAN.md
+docs/SEARCH_SYMBOL_BENCHMARK.md
