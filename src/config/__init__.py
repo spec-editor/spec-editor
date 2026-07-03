@@ -10,7 +10,7 @@ from src.config.settings import Settings
 
 
 def setup_logging(settings: Settings) -> None:
-    """Configure structlog according to settings."""
+    """Configure structlog and FeatureLogger according to settings."""
 
     log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
 
@@ -54,6 +54,26 @@ def setup_logging(settings: Settings) -> None:
         file_handler = logging.FileHandler(log_path, encoding="utf-8")
         file_handler.setLevel(log_level)
         logging.getLogger().addHandler(file_handler)
+
+    # Enable feature tracing for specified scenarios
+    _setup_trace_scenarios(settings)
+
+
+def _setup_trace_scenarios(settings: Settings) -> None:
+    """Parse SPEC_EDITOR__TRACE_SCENARIOS and enable FeatureLogger filters."""
+    from src.tracing import FeatureLogger
+
+    raw = settings.trace_scenarios.strip()
+    if not raw:
+        return
+
+    if raw == "*":
+        FeatureLogger.enable_all()
+    else:
+        for sid in raw.split(","):
+            sid = sid.strip()
+            if sid:
+                FeatureLogger.enable(sid)
 
 
 def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:

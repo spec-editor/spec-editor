@@ -9,13 +9,16 @@ from pathlib import Path
 import click
 import frontmatter
 from rich.console import Console
+from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.table import Table
 
 from src.cli.commands import _BUILTIN_METHODOLOGIES, cli, console
 from src.context.builder import ContextBuilder
 from src.storage.filesystem import FilesystemStorage
 from src.view.renderer import MermaidRenderer
 
-# view — render spec graph as interactive HTML/Mermaid
+# view — render spec graph as interactive HTML/Mermaid, or show element content
 # ======================================================================
 
 
@@ -35,29 +38,114 @@ from src.view.renderer import MermaidRenderer
     help="Output HTML file (default: temp + open browser)",
 )
 @click.option(
-    "--element", "-e", default=None, help="Focus on element ID and its connections"
+    "--diagram",
+    "-d",
+    default=None,
+    help="Focus graph on element ID and its connections",
+)
+@click.option(
+    "--element",
+    "-e",
+    default=None,
+    help="Show element content by ID in terminal",
 )
 @click.option(
     "--aspect", "-a", default=None, help="Show all elements in aspect (e.g. modules)"
 )
 def view(
-    path: str, output: str | None, element: str | None, aspect: str | None
+    path: str,
+    output: str | None,
+    diagram: str | None,
+    element: str | None,
+    aspect: str | None,
 ) -> None:
     """Render the specification as an interactive Mermaid graph in the browser.
 
     \b
     Full graph:   spec-editor view
-    By element:   spec-editor view -e ENT-004
+    By diagram:   spec-editor view -d ENT-004
+    By element:   spec-editor view -e MOD-001
     By aspect:    spec-editor view -a modules
     """
+    from pathlib import Path as _Path
+
+    project_path = _Path(path).resolve()
+
+    # --- Element content mode: show element in terminal ---
+    if element:
+        _show_element_content(project_path, element)
+        return
+
+    # --- Graph mode ---
     from src.view.renderer import MermaidRenderer
 
     renderer = MermaidRenderer()
     out = Path(output) if output else None
     result = renderer.render_html(
-        Path(path), out, element_id=element, aspect_name=aspect
+        project_path, out, element_id=diagram, aspect_name=aspect
     )
     console.print(f"[green]Spec graph rendered:[/green] {result}")
+
+
+def _show_element_content(project_path: Path, element_id: str) -> None:
+    """Read an element by ID and print its full content to terminal."""
+    storage = FilesystemStorage(project_path)
+    try:
+        el = storage.read_element(element_id)
+    except KeyError:
+        console.print(f"[red]Element not found:[/red] {element_id}")
+        raise SystemExit(1)
+
+    # Header
+    console.print()
+    console.print(
+        Panel(
+            f"[bold cyan]{el.id}[/bold cyan]: {el.title}",
+            subtitle=f"aspect: {el.aspect}  |  type: {el.element_type}  |  status: {el.status.value}",
+            border_style="blue",
+        )
+    )
+
+    # Metadata table
+    meta_table = Table(show_header=False, box=None, padding=(0, 2))
+    meta_table.add_column("Key", style="dim")
+    meta_table.add_column("Value")
+    if el.parent:
+        meta_table.add_row("Parent", el.parent)
+    if el.children:
+        meta_table.add_row("Children", ", ".join(el.children))
+    if el.tags:
+        meta_table.add_row("Tags", ", ".join(el.tags))
+    if el.derived_from:
+        meta_table.add_row("Derived from", ", ".join(el.derived_from))
+    if el.covered_by:
+        meta_table.add_row("Covered by", ", ".join(el.covered_by))
+    if el.provenance:
+        meta_table.add_row("Source", el.provenance.source)
+        meta_table.add_row(
+            "Confidence", f"{el.provenance.confidence:.0%}"
+        )
+    console.print(meta_table)
+
+    # Relationships
+    if el.relationships:
+        console.print()
+        rel_table = Table(title="Relationships", show_header=True)
+        rel_table.add_column("Role", style="green")
+        rel_table.add_column("Target", style="cyan")
+        for rel_type, entries in el.relationships.items():
+            for entry in entries:
+                rel_table.add_row(entry.role, entry.target)
+        console.print(rel_table)
+
+    # Content (markdown body)
+    if el.content:
+        console.print()
+        console.print(Panel(el.content.strip(), title="Content", border_style="dim"))
+    else:
+        console.print(Panel("[dim](no content)[/dim]", title="Content", border_style="dim"))
+
+    console.print()
 
 
 # ======================================================================
@@ -70,7 +158,7 @@ def view(
     "--output",
     "-o",
     default=None,
-    help="Output directory (default: /tmp/spec-editor-demo)",
+    help="Output directory (default: system temp dir / 'spec-editor-demo')",
 )
 def demo(output: str | None) -> None:
     """Quick demo: see a pre-generated specification without any LLM calls.
@@ -91,7 +179,8 @@ def demo(output: str | None) -> None:
     if output:
         demo_dir = Path(output).resolve()
     else:
-        demo_dir = Path("/tmp/spec-editor-demo")
+        import tempfile
+        demo_dir = Path(tempfile.gettempdir()) / "spec-editor-demo"
     # Fresh start: remove old demo if present
     if demo_dir.exists():
         shutil.rmtree(demo_dir)
@@ -109,17 +198,17 @@ def demo(output: str | None) -> None:
         agents_yaml.write_text("""agents:
   agent_1:
     provider: deepseek
-    model: deepseek/deepseek-chat
+    model: deepseek/deepseek-reasoner
     temperature: 0.7
     max_tokens: 4096
   agent_2:
     provider: deepseek
-    model: deepseek/deepseek-chat
+    model: deepseek/deepseek-reasoner
     temperature: 0.7
     max_tokens: 4096
   orchestrator:
     provider: deepseek
-    model: deepseek/deepseek-chat
+    model: deepseek/deepseek-reasoner
     temperature: 0.3
     max_tokens: 4096
 max_rounds: 20

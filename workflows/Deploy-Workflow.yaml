@@ -1,0 +1,17 @@
+workflow:
+  name: deploy
+  version: "2.0"
+  description: Deploy for hermes-personal
+
+  steps:
+    - id: check_java
+      tool: terminal
+      params:
+        command: "python3 -c 'from src.system_requirements import JavaRuntimeChecker; h=JavaRuntimeChecker()._detect_java_home(); print(h or \"\")' > /tmp/spec-editor-java-home && echo 'Java OK'"
+      description: "Detect Java and persist JAVA_HOME to file"
+
+    - id: android_build
+      tool: terminal
+      params:
+        command: "export JH=$(cat /tmp/spec-editor-java-home 2>/dev/null) && export JAVA_HOME=${JH:-/opt/homebrew/opt/openjdk@17} && export PATH=$JAVA_HOME/bin:$PATH && cd android && ./gradlew assembleDebug 2>&1 && echo BUILD_OK || (echo BUILD_FAILED; exit 1)"
+      description: "Build Android APK using persisted JAVA_HOME"

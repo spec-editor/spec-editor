@@ -1,0 +1,43 @@
+# Build artifacts
+dist/
+build/
+*.egg-info/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtual environment
+.venv/
+venv/
+
+# Node
+node_modules/
+.next/
+out/
+
+# IDE
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore
+
+# Tests & docs (not needed in container)
+tests/
+docs/
+
+# Extensions (not needed for MCP server container)
+packages/vscode-extension/
+packages/jetbrains-extension/
+packages/zed-extension/
+
+# Data files (mounted as volumes, NOT the data/ Python package)
+Product/
+source_raw/
+
+# Misc
+*.vsix
+*.pyc
+.DS_Store

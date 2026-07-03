@@ -4,12 +4,12 @@ Loads LLM agent prompts from YAML language files in prompts/.
 Falls back to English when a key or language is missing.
 """
 
-from importlib import resources
 from pathlib import Path
 
 import yaml
 
 from src.config import get_logger
+from src.config._data_path import data_path
 
 logger = get_logger(__name__)
 
@@ -35,7 +35,7 @@ class PromptLoader:
         language: str = "en",
     ) -> None:
         if prompts_dir is None:
-            prompts_dir = resources.files("data") / "prompts"
+            prompts_dir = data_path("prompts")
         self._prompts_dir = Path(prompts_dir)
         self._language = language
         self._cache: dict[str, dict[str, str]] = {}

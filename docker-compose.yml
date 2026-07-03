@@ -1,0 +1,39 @@
+# Spec Editor — Docker Compose
+# =============================================================================
+# Start:  docker compose up -d
+# Stop:   docker compose down
+# Logs:   docker compose logs -f mcp
+# =============================================================================
+
+services:
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    image: spec-editor-mcp:latest
+    container_name: spec-editor-mcp
+    ports:
+      - "8088:8088"
+    volumes:
+      # Mount the spec-editor2 source code (for live development)
+      - .:/app
+      # Mount the projects directory — host path → container /projects
+      - ${HOME}/Documents/Droid:/projects
+    environment:
+      PYTHONUNBUFFERED: 1
+      # Host → container path mapping so MCP can resolve host fullpaths
+      SPEC_EDITOR_MOUNT_HOST: ${HOME}/Documents/Droid
+      SPEC_EDITOR_MOUNT_CONTAINER: /projects
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    image: spec-editor-frontend:latest
+    container_name: spec-editor-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - mcp
+    restart: unless-stopped

@@ -1,0 +1,91 @@
+<idea-plugin>
+    <id>com.speceditor</id>
+    <name>Spec Editor</name>
+    <version>0.1.0</version>
+    <vendor url="https://github.com/zed-industries/spec-editor">Spec Editor Team</vendor>
+
+    <description><![CDATA[
+        AI-powered requirements engineering with structured specs.
+        Connects to spec-editor MCP server for spec browsing,
+        diagram generation, and git history.
+
+        Features:
+        - Auto-starts MCP server on project open (with smart Python detection)
+        - Embedded frontend (React/Next.js) via JCEF browser
+        - 3-panel layout: Element Tree | Mermaid Diagram | Element Detail
+        - Element CRUD (Create / Edit / Delete) via MCP
+        - Validation and metrics dashboard
+        - Real-time SSE updates
+        - Agent configuration (Provider, Model, Temperature, Max Tokens)
+        - API key stored in OS keychain (PasswordSafe)
+        - MCP auto-restart on crash (up to 3 times)
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.lang</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Settings -->
+        <applicationService
+            serviceImplementation="com.speceditor.SpecEditorSettings"/>
+        <applicationConfigurable
+            parentId="tools"
+            instance="com.speceditor.SpecEditorSettingsConfigurable"
+            id="com.speceditor.settings"
+            displayName="Spec Editor"/>
+
+        <!-- Startup activity -->
+        <postStartupActivity
+            implementation="com.speceditor.SpecEditorStartup"/>
+
+        <!-- Tool window -->
+        <toolWindow
+            id="Spec Editor"
+            anchor="right"
+            icon="AllIcons.Toolwindows.ToolWindowStructure"
+            factoryClass="com.speceditor.SpecEditorToolWindowFactory"/>
+
+        <!-- Notification group -->
+        <notificationGroup id="Spec Editor"
+            displayType="BALLOON"/>
+    </extensions>
+
+    <actions>
+        <group id="SpecEditor.Actions" text="Spec Editor" popup="true">
+            <action id="SpecEditor.OpenProject"
+                class="com.speceditor.actions.OpenProjectAction"
+                text="Open Project"
+                description="Open a spec-editor project (contains methodology.yaml)"/>
+            <action id="SpecEditor.NewProject"
+                class="com.speceditor.actions.NewProjectAction"
+                text="New Project"
+                description="Create a new spec-editor project"/>
+            <separator/>
+            <action id="SpecEditor.CreateElement"
+                class="com.speceditor.actions.CreateElementAction"
+                text="Create Element"
+                description="Create a new specification element"/>
+            <action id="SpecEditor.ViewDiagram"
+                class="com.speceditor.actions.ViewDiagramAction"
+                text="View Diagram"
+                description="Generate Mermaid diagram for current project"/>
+            <action id="SpecEditor.Validate"
+                class="com.speceditor.actions.ValidateAction"
+                text="Validate Requirements"
+                description="Run specification validation"/>
+            <separator/>
+            <action id="SpecEditor.SetApiKey"
+                class="com.speceditor.actions.SetApiKeyAction"
+                text="Set API Key"
+                description="Set LLM API key (stored in OS keychain)"/>
+
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </group>
+    </actions>
+
+    <projectListeners>
+        <listener class="com.speceditor.SpecEditorStartup"
+                  topic="com.intellij.openapi.project.ProjectManagerListener"/>
+    </projectListeners>
+</idea-plugin>
+

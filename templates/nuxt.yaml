@@ -1,0 +1,57 @@
+# Nuxt 3 — Vue full-stack framework
+#
+# Detection: package.json with nuxt dependency, nuxt.config.ts file.
+
+name: nuxt
+platform: node
+runtime: node >= 20
+description: >
+  Nuxt 3 application. Vue 3 with SSR, SSG, hybrid rendering, auto-imports,
+  file-based routing, and Nitro server. Deployable to Vercel, Node.js,
+  or static hosting.
+
+detection:
+  files:
+    - package.json
+    - nuxt.config.ts
+    - nuxt.config.js
+  any_of_config: true
+  frameworks:
+    - nuxt
+    - vue
+
+init:
+  - command: npm ci
+    description: Install dependencies
+  - command: cp .env.example .env
+    description: Copy environment template
+    optional: true
+
+test:
+  - command: npx nuxi typecheck
+    description: TypeScript type check
+  - command: npx vitest run
+    description: Run unit tests
+    optional: true
+  - command: npx eslint .
+    description: Lint
+    optional: true
+
+build:
+  - command: npx nuxi build
+    description: Nuxt production build
+
+deploy:
+  - command: npx nuxi generate
+    description: Static generation (SSG)
+    optional: true
+  - command: node .output/server/index.mjs
+    description: Start Nitro server (SSR)
+    optional: true
+  - command: docker build -t {{project_slug}}:latest . && docker push {{registry}}/{{project_slug}}:latest
+    description: Docker deploy
+    optional: true
+
+artifacts:
+  - .output/ directory (Nitro server or static)
+  - Docker image (optional)

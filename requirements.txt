@@ -1,0 +1,16 @@
+# Spec Editor — Docker production dependencies
+# Synced from pyproject.toml [project.dependencies]
+pydantic>=2.0
+pydantic-settings>=2.0
+python-dotenv>=1.0
+litellm>=1.50
+python-frontmatter>=1.1
+click>=8.1
+rich>=13.0
+structlog>=24.0
+pyyaml>=6.0
+jinja2>=3.0
+markdown>=3.5
+tree-sitter>=0.21,<0.22
+tree-sitter-languages==1.9.1
+numpy>=2.0

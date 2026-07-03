@@ -1,0 +1,25 @@
+{
+  "name": "spec-editor-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Spec Editor — interactive requirements specification browser",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "export": "STATIC_EXPORT=true next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "mermaid": "^10.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.3.0"
+  }
+}

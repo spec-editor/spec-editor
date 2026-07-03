@@ -1,0 +1,52 @@
+# Express.js / Node.js REST API
+#
+# Detection: package.json with express dependency, no frontend framework.
+
+name: express_api
+platform: node
+runtime: node >= 20
+description: >
+  Node.js REST API using Express.js (or Fastify/Koa). TypeScript preferred.
+  Typical backend for SPAs or microservices.
+
+detection:
+  files:
+    - package.json
+  frameworks:
+    - express
+    - fastify
+    - koa
+  not_frameworks:
+    - react
+    - vue
+    - next
+    - nuxt
+
+init:
+  - command: npm ci
+    description: Install dependencies
+
+test:
+  - command: npx jest --passWithNoTests
+    description: Run Jest tests
+    optional: true
+  - command: npx tsc --noEmit
+    description: TypeScript check
+
+build:
+  - command: npx tsc
+    description: Compile TypeScript
+
+deploy:
+  - command: docker build -t {{project_slug}}:latest . && docker push {{registry}}/{{project_slug}}:latest
+    description: Docker build and push
+    optional: true
+
+services:
+  - postgres
+  - redis
+  optional: true
+
+artifacts:
+  - dist/ or build/ directory (compiled JS)
+  - Docker image

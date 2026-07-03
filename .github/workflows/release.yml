@@ -1,0 +1,173 @@
+# Spec Editor — Release workflow
+#
+# Triggered by pushing a version tag (v*).
+# Builds and publishes to all marketplaces.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish_pypi:
+        description: "Publish to PyPI"
+        type: boolean
+        default: true
+      publish_vscode:
+        description: "Publish to VSCode Marketplace"
+        type: boolean
+        default: true
+      publish_jetbrains:
+        description: "Publish to JetBrains Marketplace"
+        type: boolean
+        default: false
+      publish_zed:
+        description: "Publish to ZED Extension Registry"
+        type: boolean
+        default: false
+
+jobs:
+  # ===========================================================================
+  # CI gate — all tests must pass before release
+  # ===========================================================================
+
+  ci-gate:
+    uses: ./.github/workflows/ci.yml
+
+  # ===========================================================================
+  # PyPI
+  # ===========================================================================
+
+  publish-pypi:
+    needs: ci-gate
+    if: github.event.inputs.publish_pypi != 'false'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build
+        run: |
+          pip install build
+          python -m build
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  # ===========================================================================
+  # VSCode Marketplace
+  # ===========================================================================
+
+  publish-vscode:
+    needs: ci-gate
+    if: github.event.inputs.publish_vscode != 'false'
+    runs-on: ubuntu-latest
+    environment: vscode-marketplace
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build frontend
+        working-directory: packages/frontend
+        run: |
+          npm ci
+          npm run build
+          npx next export -o out
+      - name: Build extension
+        working-directory: packages/vscode-extension
+        run: |
+          npm ci
+          npm run build
+          npm install -g @vscode/vsce
+          vsce package --no-dependencies
+      - name: Publish to VSCode Marketplace
+        working-directory: packages/vscode-extension
+        run: |
+          npx @vscode/vsce publish --packagePath $(ls *.vsix | head -1) -p ${{ secrets.VSCE_TOKEN }}
+
+  # ===========================================================================
+  # JetBrains Marketplace
+  # ===========================================================================
+
+  publish-jetbrains:
+    needs: ci-gate
+    if: github.event.inputs.publish_jetbrains == 'true'
+    runs-on: ubuntu-latest
+    environment: jetbrains-marketplace
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build + Publish
+        working-directory: packages/jetbrains-extension
+        env:
+          JETBRAINS_TOKEN: ${{ secrets.JETBRAINS_TOKEN }}
+        run: ./gradlew publishPlugin --no-daemon
+
+  # ===========================================================================
+  # ZED Extension Registry
+  # ===========================================================================
+
+  publish-zed:
+    needs: ci-gate
+    if: github.event.inputs.publish_zed == 'true'
+    runs-on: ubuntu-latest
+    environment: zed-registry
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-wasip1
+      - name: Build WASM
+        working-directory: packages/zed-extension
+        run: cargo build --release --target wasm32-wasip1
+      - name: Publish to ZED Registry
+        env:
+          ZED_REGISTRY_TOKEN: ${{ secrets.ZED_REGISTRY_TOKEN }}
+        run: |
+          echo "ZED registry publish — manual PR flow for now"
+          echo "Submit PR to zed-industries/extensions with the built WASM"
+
+  # ===========================================================================
+  # GitHub Release (create release + upload artifacts)
+  # ===========================================================================
+
+  github-release:
+    needs: [publish-pypi, publish-vscode, publish-jetbrains, publish-zed]
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "v${{ steps.version.outputs.version }}"
+          body: |
+            ## Spec Editor v${{ steps.version.outputs.version }}
+
+            ### Installation
+            ```bash
+            pip install spec-editor==${{ steps.version.outputs.version }}
+            ```
+
+            ### Extensions
+            - VSCode: install from [Marketplace](https://marketplace.visualstudio.com/items?itemName=spec-editor.spec-editor-vscode)
+            - ZED: configure context_server in settings.json
+            - JetBrains: install from [Marketplace](https://plugins.jetbrains.com/plugin/spec-editor)
+
+            ### Changes
+            See [CHANGELOG.md](https://github.com/zed-industries/spec-editor/blob/main/CHANGELOG.md)
+          draft: true
+          generate_release_notes: true

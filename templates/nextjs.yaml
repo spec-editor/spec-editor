@@ -1,0 +1,57 @@
+# Next.js App Router — React full-stack framework
+#
+# Detection: package.json with next dependency, next.config.* file.
+
+name: nextjs
+platform: node
+runtime: node >= 20
+description: >
+  Next.js application with App Router. Supports SSR, SSG, ISR, API routes.
+  React Server Components by default. Can be deployed to Vercel, Docker,
+  or Node.js server.
+
+detection:
+  files:
+    - package.json
+    - next.config.ts
+    - next.config.js
+    - next.config.mjs
+  any_of_config: true
+  frameworks:
+    - next
+    - react
+    - react-dom
+
+init:
+  - command: npm ci
+    description: Install dependencies
+  - command: cp .env.local.example .env.local
+    description: Copy environment template
+    optional: true
+
+test:
+  - command: npx tsc --noEmit
+    description: TypeScript type check
+  - command: npx eslint . --ext .ts,.tsx
+    description: Lint
+    optional: true
+  - command: npx vitest run
+    description: Unit tests
+    optional: true
+
+build:
+  - command: npx next build
+    description: Next.js production build
+
+deploy:
+  - command: npx vercel --prod
+    description: Deploy to Vercel
+    optional: true
+  - command: docker build -t {{project_slug}}:latest . && docker push {{registry}}/{{project_slug}}:latest
+    description: Docker build and push
+    optional: true
+
+artifacts:
+  - .next/ directory (optimized build)
+  - Docker image (optional)
+  - Vercel deployment (optional)

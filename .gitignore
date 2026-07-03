@@ -1,4 +1,6 @@
+# ──────────────────────────────────────────────────────────────
 # Python
+# ──────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -6,29 +8,61 @@ dist/
 build/
 .eggs/
 
-# Virtual env
+# ──────────────────────────────────────────────────────────────
+# Virtual environment
+# ──────────────────────────────────────────────────────────────
 .venv/
 venv/
+.python-version
 
-# Environment
+# ──────────────────────────────────────────────────────────────
+# Environment & Secrets — NEVER commit real credentials
+# ──────────────────────────────────────────────────────────────
 .env
+hooks.yaml                     # Real Telegram API keys — use hooks.example.yaml
+local.yaml                    # Real API keys, license keys — use local.example.yaml
 
-# IDE
+# ──────────────────────────────────────────────────────────────
+# IDE / Editor
+# ──────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
+*.code-workspace
 
+# ──────────────────────────────────────────────────────────────
 # OS
+# ──────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 
-# Project
+# ──────────────────────────────────────────────────────────────
+# Project — generated / runtime artifacts
+# ──────────────────────────────────────────────────────────────
 *.log
+*.db
+*.sqlite
+*.sqlite3
 dialogue.log
 dialogue.jsonl
+dialogue.json
+dialogue.yaml
 
-# Generated aspect folders (защита от случайного запуска без -p)
+# spec-editor lock & run files
+.spec-editor-*
+
+# License validation cache (contains license keys)
+license.cache
+~/.spec-editor/
+
+# OpenCode config (may have local paths)
+opencode.json
+
+# ──────────────────────────────────────────────────────────────
+# Generated aspect folders
+# (protected against accidental run without -p flag)
+# ──────────────────────────────────────────────────────────────
 user_interface/
 user_scenarios/
 modules/
@@ -37,41 +71,80 @@ non_functional/
 aspects/
 !data/examples/bookstore/aspects/
 !data/examples/bookstore/aspects/**
+
+# ──────────────────────────────────────────────────────────────
+# Project-local overrides (templates are tracked instead)
+# ──────────────────────────────────────────────────────────────
 source/
 methodology.yaml
 !data/methodology.yaml
 agents.yaml
 
-# Test
+# ──────────────────────────────────────────────────────────────
+# Ingestion pipeline output
+# ──────────────────────────────────────────────────────────────
+ingestion/
+
+# ──────────────────────────────────────────────────────────────
+# Source raw documents
+# ──────────────────────────────────────────────────────────────
+source_raw/*
+!source_raw/.gitkeep
+sources_raw/
+
+# ──────────────────────────────────────────────────────────────
+# Agent execution logs
+# ──────────────────────────────────────────────────────────────
+logs/
+
+# ──────────────────────────────────────────────────────────────
+# Test / CI artifacts
+# ──────────────────────────────────────────────────────────────
 .pytest_cache/
 .coverage
 htmlcov/
+test-results/
 
-# Internal docs
+# ──────────────────────────────────────────────────────────────
+# Internal docs (not for OSS publication)
+# ──────────────────────────────────────────────────────────────
 Development/
 Product/
 spec-editor-session.*
 new_features.txt
 deploy.yaml
 
-# Paid content (keep out of OSS)
+# ──────────────────────────────────────────────────────────────
+# Paid / premium content (keep out of OSS repo)
+# ──────────────────────────────────────────────────────────────
 paid-methodologies/
 
+# ──────────────────────────────────────────────────────────────
 # Session artifacts
+# ──────────────────────────────────────────────────────────────
 dialogue.jsonl
 
-# Source raw - keep dir, exclude contents
-source_raw/*
-!source_raw/.gitkeep
-backend/
-run.log
+# ──────────────────────────────────────────────────────────────
+# Documentation demos (large binary files)
+# ──────────────────────────────────────────────────────────────
 docs/demo.cast
 docs/demo.html
 docs/demo.tape
+*.cast
 
-# Landing page (moved to spec-editor.github.io)
+# ──────────────────────────────────────────────────────────────
+# Landing page (hosted separately)
+# ──────────────────────────────────────────────────────────────
 index.html
 landing/
 
-# Agent skills (personal)
+# ──────────────────────────────────────────────────────────────
+# Backend runtime
+# ──────────────────────────────────────────────────────────────
+backend/
+run.log
+
+# ──────────────────────────────────────────────────────────────
+# Agent skills (personal / custom)
+# ──────────────────────────────────────────────────────────────
 .agents/

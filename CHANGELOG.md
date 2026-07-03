@@ -24,4 +24,16 @@ All notable changes to Spec Editor will be documented in this file.
 - Batch classification (30 files/batch, ~40x API call reduction)
 - Context compaction for long-running agent sessions
 - SRC deletion protection with `_deleted/` archive
+- Pluggable logging backend (`LogConfigBackend` ABC, `LocalYamlBackend`)
+- Pluggable Secrets Provider (`env`, `aws_secrets`, `vault`, `noop`)
+- Pluggable Event Bus (`redis`, `memory`, `nats`)
+- Pluggable Notifier (`log`, `slack`, `telegram`, `email`)
+- Pluggable Auth Provider (`noop`, `casbin`, `openfga`)
+- Implementation Framework — 3-layer structured code generation:
+  - Layer 1: Architectural Patterns (`hexagonal`, `clean`, `ddd`, `mvc`, `none`)
+  - Layer 2: Coding Templates (Copier/Jinja2 with built-in hexagonal templates)
+  - Layer 3: Architecture Enforcement (auto-generated `tests/arch/test_architecture.py`)
+- `implementation_architect` skill — per-element implementation decisions stored on IMP-* elements
+- Architect phase in cycle loop: INGEST → ANALYST → ARCHITECT → PM AGENT
+- Element field `implementation_architect` for structured implementation decisions
 - 154 tests (unit + integration)

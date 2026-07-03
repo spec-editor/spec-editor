@@ -16,14 +16,36 @@ class Skill(BaseModel):
 
 
 class SkillsRegistry:
-    """Registry of skills loaded from skills.yaml."""
+    """Registry of skills loaded from YAML file(s) or directory.
 
-    def __init__(self, path: Path | None = None) -> None:
+    Supports three layouts:
+
+    * Single file: ``skills.yaml`` at project root (legacy).
+    * Directory:   ``skills/*.yaml`` — each file contributes skills.
+    * Mixed:       directory + legacy file merged.
+
+    Files are merged; duplicate skill names are overwritten
+    (last wins).
+    """
+
+    def __init__(self, path: Path | list[Path] | None = None) -> None:
         self._skills: dict[str, Skill] = {}
-        if path and path.exists():
-            self._load(path)
+        paths: list[Path] = []
+        if isinstance(path, list):
+            paths = path
+        elif path is not None:
+            paths = [path]
 
-    def _load(self, path: Path) -> None:
+        for p in paths:
+            if not p.exists():
+                continue
+            if p.is_dir():
+                for yaml_file in sorted(p.glob("*.yaml")):
+                    self._load_file(yaml_file)
+            else:
+                self._load_file(p)
+
+    def _load_file(self, path: Path) -> None:
         with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
 

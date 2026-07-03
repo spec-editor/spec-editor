@@ -1,0 +1,57 @@
+# Laravel — PHP web framework
+#
+# Detection: composer.json with laravel/framework dependency, artisan file.
+
+name: laravel
+platform: php
+runtime: php >= 8.2
+description: >
+  Laravel PHP web application. MVC architecture with Eloquent ORM,
+  Blade templating, Artisan CLI. Typically backed by MySQL/PostgreSQL.
+
+detection:
+  files:
+    - composer.json
+    - artisan
+  frameworks:
+    - laravel/framework
+
+init:
+  - command: composer install --no-interaction --prefer-dist
+    description: Install PHP dependencies
+  - command: cp .env.example .env && php artisan key:generate
+    description: Setup environment
+  - command: php artisan migrate --force
+    description: Run database migrations
+    optional: true
+
+test:
+  - command: php artisan test --parallel
+    description: Run PHPUnit tests
+  - command: php artisan pint --test
+    description: Lint with Laravel Pint
+    optional: true
+
+build:
+  - command: composer install --no-dev --optimize-autoloader
+    description: Production dependencies
+  - command: php artisan config:cache && php artisan route:cache && php artisan view:cache
+    description: Cache for production
+
+deploy:
+  - command: rsync -avz --exclude .git --exclude node_modules ./ {{deploy_host}}:{{deploy_path}}/
+    description: Deploy via rsync
+    optional: true
+  - command: docker build -t {{project_slug}}:latest . && docker push {{registry}}/{{project_slug}}:latest
+    description: Docker build and push
+    optional: true
+
+services:
+  - mysql
+  - postgres
+  - redis
+  optional: true
+
+artifacts:
+  - Optimized Laravel app (cached config)
+  - Docker image (optional)

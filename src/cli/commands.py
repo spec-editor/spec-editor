@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.table import Table
 
 from src.config import get_logger
+from src.config._data_path import data_path
 from src.config.methodology import load_methodology
 from src.config.settings import (
     AgentConfig,
@@ -24,7 +25,7 @@ from src.tracing import implements
 logger = get_logger(__name__)
 console = Console()
 
-_BUILTIN_METHODOLOGIES = resources.files("data") / "methodologies"
+_BUILTIN_METHODOLOGIES = data_path("methodologies")
 
 _README_TEMPLATE = """\
 # Project Description
@@ -72,20 +73,64 @@ web store for retail customers.
 
 
 @click.group()
+@click.version_option(version="0.1.9", prog_name="spec-editor")
+@click.pass_context
 @implements("SRC-008")
 @implements("MOD-005")
-def cli() -> None:
+def cli(ctx):
     """Spec Editor — AI agents for requirements development."""
-    pass
+    from pathlib import Path
+
+    from rich.console import Console
+
+    cwd = Path.cwd()
+    project = None
+    # Auto-detect: check current dir, then parent, then grandparent
+    for candidate in [cwd, cwd.parent, cwd.parent.parent]:
+        if (candidate / "methodology.yaml").exists() or (
+            candidate / "local.yaml"
+        ).exists():
+            project = candidate
+            break
+
+    ctx.ensure_object(dict)
+    ctx.obj["project_path"] = str(project) if project else None
+
+    c = Console()
+    if project:
+        c.print(f"[dim]Project: {project}[/dim]")
+    else:
+        c.print("[dim]No project detected (cd to project dir or use -p)[/dim]")
 
 
 # Import submodules to register all @cli.command() decorators
+# (core commands only — plugins register via hooks)
 from src.cli import (
     commands_core,  # noqa: E402, F401
+    commands_coverage,  # noqa: E402, F401
     commands_edit,  # noqa: E402, F401
     commands_export,  # noqa: E402, F401
     commands_export_helpers,  # noqa: E402, F401
     commands_ingest,  # noqa: E402, F401
     commands_init,  # noqa: E402, F401
+    commands_license,  # noqa: E402, F401
+    commands_shutdown,  # noqa: E402, F401
     commands_view,  # noqa: E402, F401
 )
+
+# Register the license command group
+from src.cli.commands_license import license_group
+
+cli.add_command(license_group)
+
+# Plugin CLI commands (cycle, agent, etc.) — discovered via hooks
+try:
+    from src.hooks import get_plugins
+
+    for _plugin in get_plugins():
+        try:
+            _plugin.register_cli_commands(cli)
+        except Exception:
+            pass
+except ImportError:
+    pass

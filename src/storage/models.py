@@ -7,12 +7,23 @@ from pydantic import BaseModel, Field
 
 
 class ElementStatus(str, Enum):
-    """Requirements element lifecycle status."""
+    """Requirements element lifecycle — aligned with STATUSES.md.
 
-    DRAFT = "draft"
-    REVIEWED = "reviewed"
-    CONFIRMED = "confirmed"
-    DEPRECATED = "deprecated"
+    draft ──→ reviewed ──→ confirmed
+      │          │
+      │          └──→ blocked ──→ draft (PM refine)
+      │
+      └──→ deprecated (no longer needed / auto-resolved)
+    """
+
+    DRAFT = "draft"           # Requires analysis/refinement (analyst-manager)
+    REVIEWED = "reviewed"     # Ready for implementation (coding agent)
+    CONFIRMED = "confirmed"   # Implemented, tests passed (final state)
+    BLOCKED = "blocked"       # Cannot fix, needs PM/analyst refinement
+    DEPRECATED = "deprecated" # No longer relevant / auto-closed
+    # Legacy — no longer created, only read for backward compat:
+    FIXED = "fixed"           # @deprecated — use CONFIRMED
+    IMPLEMENTED = "implemented"  # @deprecated — use CONFIRMED
 
 
 class RelationshipEntry(BaseModel):
@@ -69,6 +80,12 @@ class Element(BaseModel):
     covered_by: list[str] = Field(
         default_factory=list, description="IDs of elements that cover this one"
     )
+    implementation_architect: dict[str, Any] | None = Field(
+        default=None,
+        description="Implementation decisions made by the Implementation Architect agent. "
+        "Keys: structure, domain_style, ddd_type, template, layer, ports, adapters. "
+        "Other agents SHOULD NOT read or modify this field.",
+    )
     content: str = Field(
         default="",
         description="Markdown body of the element (without YAML frontmatter)",
@@ -84,6 +101,10 @@ class ElementSummary(BaseModel):
     title: str
     status: ElementStatus = ElementStatus.DRAFT
     parent: str | None = None
+    children: list[str] = Field(default_factory=list)
+    relationships: dict[str, list[RelationshipEntry]] = Field(default_factory=dict)
+    derived_from: list[str] = Field(default_factory=list)
+    implementation_architect: dict[str, Any] | None = Field(default=None)
     tags: list[str] = Field(default_factory=list)
 
 
@@ -96,5 +117,8 @@ def element_to_summary(element: Element) -> ElementSummary:
         title=element.title,
         status=element.status,
         parent=element.parent,
+        children=element.children or [],
+        relationships=element.relationships or {},
+        derived_from=element.derived_from or [],
         tags=element.tags,
     )

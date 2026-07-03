@@ -45,6 +45,7 @@ class AspectDef(BaseModel):
     name: str
     title: str
     description: str = ""
+    default_diagram: str | None = None
     element_types: list[ElementTypeDef] = Field(default_factory=list)
     relationship_types: list[RelationshipTypeDef] = Field(default_factory=list)
 
@@ -80,6 +81,10 @@ def load_methodology(path: Path) -> Methodology:
     if data is None:
         raise ValueError(f"Methodology file is empty: {path}")
 
+    # Coerce version to string (YAML parses "1.0" as float, but model expects str)
+    if "version" in data and not isinstance(data["version"], str):
+        data["version"] = str(data["version"])
+
     return Methodology(**data)
 
 
@@ -100,6 +105,64 @@ def get_relationship_type(
             if rt.name == name:
                 return rt
     return None
+
+
+def get_root_types(methodology: Methodology) -> set[str]:
+    """Return all element types that are root-level (no parent required).
+
+    Root types are the first element_type in each aspect (top of hierarchy),
+    plus any type that never appears as a child of another type within its
+    aspect according to the methodology's element_type ordering.
+    """
+    roots: set[str] = set()
+    for aspect in methodology.aspects:
+        if aspect.element_types:
+            # First type is root
+            roots.add(aspect.element_types[0].name)
+    return roots
+
+
+def get_hierarchy(methodology: Methodology, aspect_name: str) -> dict[str, str | None]:
+    """Return parent→child hierarchy for an aspect based on `consists_of`.
+
+    Reads the methodology's consists_of relationships to determine:
+    - Which element type is the parent for each child type.
+    - Which types are top-level (no parent within the aspect).
+
+    Returns dict: {child_type: parent_type_or_None}
+    e.g. for user_interface: {"screen": "section", "widget": "screen", "control": "widget", "section": None}
+    """
+    aspect = get_aspect(methodology, aspect_name)
+    if not aspect:
+        return {}
+
+    hierarchy: dict[str, str | None] = {}
+
+    # All element types start as potential top-level
+    for et in aspect.element_types:
+        hierarchy[et.name] = None
+
+    # Find consists_of relationships within this aspect
+    for rt in aspect.relationship_types:
+        if rt.name != "consists_of":
+            continue
+        # consists_of: source_aspects → target_aspects
+        # "Module consists of components" means: component is child of module
+        # So source_aspect is parent, target_aspect is child
+        # But within the SAME aspect: parent_type → child_type
+        # We infer from description/title: "section → screen → widget"
+        # For now, heuristically: the first type in element_types is top-level,
+        # and each subsequent type is child of the previous.
+
+    # Heuristic: element types are listed top-down in methodology
+    types_in_order = [et.name for et in aspect.element_types]
+    for i in range(1, len(types_in_order)):
+        parent_type = types_in_order[i - 1]
+        child_type = types_in_order[i]
+        if hierarchy.get(child_type) is None:
+            hierarchy[child_type] = parent_type
+
+    return hierarchy
 
 
 def get_element_type(
@@ -165,9 +228,9 @@ class MethodologyManager:
 
     def __init__(self, methodologies_dir: Path | None = None):
         if methodologies_dir is None:
-            from importlib import resources
+            from src.config._data_path import data_path
 
-            methodologies_dir = resources.files("data") / "methodologies"
+            methodologies_dir = data_path("methodologies")
         self._methodologies_dir = methodologies_dir
 
     @property

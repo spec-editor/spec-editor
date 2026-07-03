@@ -3,6 +3,10 @@
 Connect any MCP-compatible agent (Zed, Claude Code, Cursor, Aider) to
 your requirements specification.
 
+> For convenience, the MCP server is named `spec-editor-mcp` in the project and
+> the same container name is used in Docker.
+> In `docker-compose.yml`, the MCP service defines `container_name: spec-editor-mcp`.
+
 ## Quick Start
 
 ### 1. Connect to Zed

@@ -1,4 +1,0 @@
-Summary,Description,Story Points,Priority,Epic Link,Acceptance Criteria,Labels,Sprint
-{% for story in stories -%}
-"{{ story.title | replace('"', '""') }}","As a {{ story.as_a }}, I want {{ story.i_want }} so that {{ story.so_that }}",{{ story.story_points or '' }},{{ story.priority or '' }},{{ story.epic or '' }},"{% for ac in story.acceptance_criteria %}GIVEN {{ ac.given }} WHEN {{ ac.when }} THEN {{ ac.then }}. {% endfor %}",{{ story.tags | join(' ') }},{{ story.sprint or '' }}
-{% endfor -%}

@@ -1,0 +1,55 @@
+# WordPress — PHP CMS
+#
+# Detection: wp-config.php or composer.json with wordpress dependency.
+
+name: wordpress
+platform: php
+runtime: php >= 8.0
+description: >
+  WordPress CMS. Theme/plugin development with PHP. MySQL/MariaDB backend.
+  Deployed to standard LAMP/LEMP stack or managed hosting.
+
+detection:
+  files:
+    - wp-config.php
+    - wp-settings.php
+  any_of: true
+  frameworks:
+    - wordpress
+    - roots/bedrock
+
+init:
+  - command: composer install --no-interaction
+    description: Install PHP dependencies
+    condition:
+      file: composer.json
+  - command: wp core download --locale=en_US
+    description: Download WordPress core
+    optional: true
+
+test:
+  - command: phpunit
+    description: Run PHPUnit tests
+    optional: true
+  - command: phpcs --standard=WordPress .
+    description: WordPress coding standards
+    optional: true
+
+build:
+  - command: composer install --no-dev --optimize-autoloader
+    description: Production dependencies
+    condition:
+      file: composer.json
+
+deploy:
+  - command: rsync -avz --exclude .git --exclude node_modules ./ {{deploy_host}}:{{deploy_path}}/
+    description: Deploy via rsync
+    optional: true
+
+services:
+  - mysql
+  - mariadb
+
+artifacts:
+  - PHP application files
+  - Uploaded media (wp-content/uploads)

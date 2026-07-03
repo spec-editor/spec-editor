@@ -2,10 +2,11 @@
 
 from src.agents.base import BaseAgent
 from src.agents.prompts import get_spec_agent_prompt
+from src.agents.provider import AgentProvider, AgentRunResult
 from src.agents.role import AgentRole
 from src.agents.tools import build_all_handlers, get_tool_definitions
 from src.config.methodology import Methodology, format_methodology
-from src.providers.base import LLMProvider
+from src.providers.base import LLMProvider, Message
 from src.storage.adapter import StorageAdapter
 
 
@@ -32,6 +33,10 @@ class SpecAgent(BaseAgent):
             role = AgentRole.spec_agent(name)
 
         tools = get_tool_definitions(writable=role.writable)
+        # Filter tools if role restricts which tools are allowed
+        if role._allowed_tools:
+            tools = [t for t in tools if t.name in role._allowed_tools]
+
         tool_handlers = build_all_handlers(
             storage, methodology, source_dir, spawner, agent_for_compact=self
         )
@@ -47,6 +52,8 @@ class SpecAgent(BaseAgent):
 
         self._my_methodology = methodology
         self._my_source_dir = source_dir
+        self._methodology = methodology  # for AgentProvider.get_methodology()
+        self._source_dir = source_dir  # for AgentProvider.get_source_dir()
 
         super().__init__(
             name=name,
@@ -59,6 +66,10 @@ class SpecAgent(BaseAgent):
         )
 
     def _get_methodology(self):
+        return self._my_methodology
+
+    def get_methodology(self):
+        """Public alias for AgentProvider compatibility."""
         return self._my_methodology
 
     def _get_source_dir(self):

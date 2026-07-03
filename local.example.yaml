@@ -1,0 +1,101 @@
+# ============================================================================
+# Spec Editor — Local Project Configuration (TEMPLATE)
+# ============================================================================
+# Copy this file to local.yaml and fill in your values.
+# local.yaml is gitignored — never commit real keys or paths.
+# ============================================================================
+
+# Project identification
+project_path: /absolute/path/to/your/project
+project_slug: my-project
+
+# ============================================================================
+# Redis (required for cycle/Pro modes)
+# ============================================================================
+queue_url: redis://localhost:6379
+
+# ============================================================================
+# MCP Server
+# ============================================================================
+mcp:
+  transport: stdio                # stdio | http
+  socket: /tmp/spec-editor.sock
+  port: 8001
+
+# ============================================================================
+# LLM Provider
+# ============================================================================
+llm:
+  provider: deepseek              # deepseek | openai | anthropic | ollama
+  model: deepseek/deepseek-reasoner
+
+# ============================================================================
+# Secrets Provider — where API keys are resolved from
+# ============================================================================
+# Backends: env (default) | aws_secrets | vault | noop
+#
+# secrets:
+#   backend: env
+
+# ============================================================================
+# Event Bus — inter-agent pub/sub messaging
+# ============================================================================
+# Backends: redis (default) | memory | nats
+#
+# events:
+#   backend: redis
+#   redis:
+#     url: redis://localhost:6379
+
+# ============================================================================
+# Notifications — alerts on lifecycle events
+# ============================================================================
+# Backends: log (default) | slack | telegram | email
+#
+# notifications:
+#   backend: log
+
+# ============================================================================
+# Auth Provider — access control for multi-user deployments
+# ============================================================================
+# Backends: noop (default, allow all) | casbin | openfga
+#
+# auth:
+#   backend: noop
+
+# ============================================================================
+# Coding Templates — code generation template engine
+# ============================================================================
+# Backends: none (default, raw LLM) | jinja2 | copier
+#
+# templates:
+#   backend: none
+
+# ============================================================================
+# Architecture Enforcement — CI gate for code patterns
+# ============================================================================
+# Backends: pytest (default) | pytest_arch | import_linter | none
+#
+# enforcement:
+#   backend: pytest
+#   strict: true
+
+# ============================================================================
+# License — Pro and Cloud tier configuration
+# ============================================================================
+# Backends: noop (default, Free tier) | gumroad | file
+#
+# license:
+#   backend: noop                           # noop | gumroad | file
+#   key: ""                                 # GumRoad license key (XXXX-XXXX-XXXX-XXXX)
+#   product_id: ""                          # GumRoad product permalink ID
+#   cloud_token_key: ""                     # Cloud proxy token key
+#   cloud_proxy_url: ""                     # Cloud proxy base URL
+#   cache_path: "~/.spec-editor/license.cache"
+#   cache_ttl_days: 7
+#   offline_validation: false
+#
+#   # For air-gapped deployments:
+#   # backend: file
+#   # file_path: "./.license"
+#   # public_key: ""                        # Ed25519 public key (base64)

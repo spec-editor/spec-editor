@@ -43,6 +43,8 @@ class TestCLICommandsExist:
         assert result.exit_code == 0
 
     def test_codegen_help(self, runner):
+        """codegen CLI removed."""
+        import pytest; pytest.skip("codegen CLI removed")
         result = runner.invoke(cli, ["codegen", "--help"])
         assert result.exit_code == 0
 

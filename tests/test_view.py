@@ -30,10 +30,10 @@ class TestMermaidRenderer:
         mermaid = renderer.build_mermaid(bookstore_project)
 
         # Should have nodes for elements
-        assert "MOD-001" in mermaid
-        assert "ENT-001" in mermaid
-        assert "NFR-001" in mermaid
-        assert "SCN-001" in mermaid
+        assert "MOD_001" in mermaid
+        assert "ENT_001" in mermaid
+        assert "NFR_001" in mermaid
+        assert "SCN_001" in mermaid
 
     def test_renders_relationships_as_edges(
         self, renderer: MermaidRenderer, bookstore_project: Path
@@ -42,7 +42,7 @@ class TestMermaidRenderer:
         mermaid = renderer.build_mermaid(bookstore_project)
 
         # MOD-001 relates_to MOD-004 -> should have edge
-        assert "MOD-001" in mermaid
+        assert "MOD_001" in mermaid
         assert "-->" in mermaid  # Mermaid edge syntax
 
     def test_graph_is_valid_mermaid(
@@ -80,7 +80,7 @@ class TestMermaidRenderer:
         content = path.read_text()
         assert "<!DOCTYPE html>" in content
         assert "mermaid" in content.lower()
-        assert "MOD-001" in content
+        assert "MOD_001" in content
 
     def test_html_is_self_contained(
         self, renderer: MermaidRenderer, bookstore_project: Path, tmp_path: Path

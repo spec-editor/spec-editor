@@ -1,0 +1,55 @@
+# Android — Kotlin/Java Gradle project
+#
+# Detection: build.gradle.kts or build.gradle with Android plugin.
+
+name: android_app
+platform: android
+runtime: java >= 17
+description: >
+  Android application using Kotlin (preferred) or Java. Gradle build
+  system with Android Gradle Plugin. Targets APK/AAB output.
+
+detection:
+  files:
+    - build.gradle.kts
+    - build.gradle
+  any_of: true
+  dirs:
+    - app
+  frameworks:
+    - com.android.application
+    - com.android.library
+
+init:
+  - command: cp local.properties.example local.properties
+    description: Copy local properties
+    optional: true
+
+test:
+  - command: ./gradlew test
+    description: Run unit tests
+  - command: ./gradlew lint
+    description: Run Android lint
+    optional: true
+
+build:
+  - command: ./gradlew assembleRelease
+    description: Build release APK
+  - command: ./gradlew bundleRelease
+    description: Build AAB (Play Store)
+    optional: true
+
+deploy:
+  - command: ./gradlew publishReleaseBundle
+    description: Publish to Play Console
+    optional: true
+  - command: |
+      for device in $(adb devices | grep -v "List" | awk '{print $1}'); do
+        adb -s $device install -r app/build/outputs/apk/release/app-release.apk
+      done
+    description: Install on connected devices
+    optional: true
+
+artifacts:
+  - APK (app/build/outputs/apk/release/)
+  - AAB (app/build/outputs/bundle/release/)

@@ -1,8 +1,13 @@
 """MCP module: verification of requirements traceability to code.
 
 Two modes:
-- verify_implements: check a single file
-- verify_traceability: check the entire project
+- verify_implements: check a single file → optionally sync bidirectional links
+- verify_traceability: check the entire project → optionally sync bidirectional links
+
+Bidirectional traceability (v2):
+  Code  ──@implements("MOD-001")──→  Spec element
+  IMP-* ──implements──────────────→  MOD-* / SCN-* / SCR-*
+  MOD-* ──implemented_by─────────→  IMP-*
 """
 
 from pathlib import Path
@@ -17,7 +22,7 @@ from src.mcp.parsers.python import CodeAnnotation, parse_python
 from src.mcp.parsers.rust import parse_rust
 from src.mcp.parsers.typescript import parse_typescript
 from src.storage.adapter import StorageAdapter
-from src.storage.models import Element
+from src.storage.models import Element, ElementSummary
 
 logger = get_logger(__name__)
 
@@ -38,15 +43,148 @@ class VerificationReport(BaseModel):
     total_requirements: int = 0
     implemented: int = 0
     coverage: float = 0.0
+    links_synced: int = 0
     gaps: list[VerificationGap] = Field(default_factory=list)
+
+
+def _sync_traceability_links(
+    storage: StorageAdapter,
+    file_path: Path,
+    annotations: list[CodeAnnotation],
+    code_dir: Path,
+) -> int:
+    """Write bidirectional traceability links from code to spec.
+
+    For each @implements("REQ-ID") in the code file:
+    1. Find or create an IMP-* element for the code file
+    2. Add implements: [{target: REQ-ID}] from IMP → spec
+    3. Add implemented_by: [{target: IMP-XXX}] from spec → IMP
+
+    Returns number of links synced.
+    """
+    if not annotations:
+        return 0
+
+    # Generate a stable IMP-* ID from the relative file path
+    try:
+        rel_path = file_path.resolve().relative_to(code_dir.resolve())
+    except ValueError:
+        rel_path = file_path
+
+    # Build IMP-ID from path: src/audio_service.py → IMP-audio_service
+    stem = rel_path.stem.replace("_", "-").replace(".", "-")[:40]
+    imp_id = f"IMP-{stem}"
+
+    # Collect valid requirement IDs that exist in the spec
+    all_ids = {s.id for s in storage.list_all()}
+    valid_req_ids = [a.req_id for a in annotations if a.req_id in all_ids]
+    if not valid_req_ids:
+        return 0
+
+    # Determine language from extension
+    ext_to_lang = {
+        ".py": "python",
+        ".ts": "typescript",
+        ".tsx": "typescript",
+        ".kt": "kotlin",
+        ".java": "java",
+        ".go": "go",
+        ".rs": "rust",
+        ".js": "javascript",
+    }
+    language = ext_to_lang.get(file_path.suffix, "unknown")
+
+    # 1. Find or create the IMP element
+    try:
+        imp_element = storage.read_element(imp_id)
+    except KeyError:
+        imp_element = Element(
+            id=imp_id,
+            aspect="implementation",
+            element_type="code_artifact",
+            title=f"{rel_path.name} ({language})",
+            file_path=str(rel_path),
+            language=language,
+            status="implemented",
+        )
+
+    # 2. Build implements relationships (IMP → spec)
+    existing_imp_targets = set()
+    if imp_element.relationships and "implements" in imp_element.relationships:
+        existing_imp_targets = {
+            e.target for e in imp_element.relationships["implements"]
+        }
+    new_targets = [r for r in valid_req_ids if r not in existing_imp_targets]
+    if new_targets:
+        from src.storage.models import RelationshipEntry
+
+        if not imp_element.relationships:
+            imp_element.relationships = {}
+        if "implements" not in imp_element.relationships:
+            imp_element.relationships["implements"] = []
+        for req_id in new_targets:
+            imp_element.relationships["implements"].append(
+                RelationshipEntry(role="relates_to", target=req_id)
+            )
+        storage.write_element(imp_element)
+        logger.debug(
+            "sync_links_imp",
+            imp_id=imp_id,
+            new_implements=len(new_targets),
+        )
+
+    # 3. Write reverse links: implemented_by from each spec element → IMP
+    synced = 0
+    for req_id in valid_req_ids:
+        try:
+            spec_el = storage.read_element(req_id)
+        except KeyError:
+            continue
+
+        existing_rev_targets = set()
+        if (
+            spec_el.relationships
+            and "implemented_by" in spec_el.relationships
+        ):
+            existing_rev_targets = {
+                e.target
+                for e in spec_el.relationships["implemented_by"]
+            }
+        if imp_id not in existing_rev_targets:
+            from src.storage.models import RelationshipEntry
+
+            if not spec_el.relationships:
+                spec_el.relationships = {}
+            if "implemented_by" not in spec_el.relationships:
+                spec_el.relationships["implemented_by"] = []
+            spec_el.relationships["implemented_by"].append(
+                RelationshipEntry(role="relates_to", target=imp_id)
+            )
+            storage.write_element(spec_el)
+            synced += 1
+
+    if synced > 0:
+        logger.info(
+            "sync_links_done",
+            file=str(rel_path),
+            imp_id=imp_id,
+            synced=synced,
+        )
+
+    return synced
 
 
 def verify_traceability(
     storage: StorageAdapter,
     code_dir: Path,
     language: str = "python",
+    write_back: bool = False,
 ) -> VerificationReport:
-    """Verify that all requirements have an implementation in code."""
+    """Verify that all requirements have an implementation in code.
+
+    If write_back=True, also creates/updates IMP-* elements and
+    writes bidirectional implemented_by / implements links.
+    """
     report = VerificationReport()
 
     # Collect all annotations from code
@@ -113,6 +251,17 @@ def verify_traceability(
         report.coverage = round(report.implemented / report.total_requirements, 4)
     report.passed = len([g for g in report.gaps if g.severity == "error"]) == 0
 
+    # Write bidirectional links if requested
+    if write_back:
+        # Group annotations by file
+        by_file: dict[str, list[CodeAnnotation]] = {}
+        for ann in all_annotations:
+            by_file.setdefault(ann.file_path, []).append(ann)
+        for fpath, anns in by_file.items():
+            report.links_synced += _sync_traceability_links(
+                storage, Path(fpath), anns, code_dir
+            )
+
     return report
 
 
@@ -120,8 +269,13 @@ def verify_implements(
     storage: StorageAdapter,
     file_path: Path,
     language: str = "python",
+    write_back: bool = False,
 ) -> VerificationReport:
-    """Check a single file for compliance with requirements."""
+    """Check a single file for compliance with requirements.
+
+    If write_back=True, also creates/updates the IMP-* element for this
+    file and writes bidirectional implemented_by / implements links.
+    """
     report = VerificationReport()
     parser = _get_parser(language)
 
@@ -159,6 +313,13 @@ def verify_implements(
             _verify_entity_fields(req, symbols, annotations, report, str(file_path))
 
     report.passed = len([g for g in report.gaps if g.severity == "error"]) == 0
+
+    # Write bidirectional links if requested
+    if write_back and annotations:
+        report.links_synced = _sync_traceability_links(
+            storage, file_path, annotations, file_path.parent
+        )
+
     return report
 
 

@@ -1,0 +1,51 @@
+# Symfony — PHP enterprise framework
+#
+# Detection: composer.json with symfony/framework-bundle dependency.
+
+name: symfony
+platform: php
+runtime: php >= 8.2
+description: >
+  Symfony PHP framework. Enterprise-grade with Doctrine ORM, Twig templating,
+  Messenger queue, and extensive bundle ecosystem.
+
+detection:
+  files:
+    - composer.json
+    - symfony.lock
+  frameworks:
+    - symfony/framework-bundle
+
+init:
+  - command: composer install --no-interaction --prefer-dist
+    description: Install dependencies
+  - command: php bin/console doctrine:migrations:migrate --no-interaction
+    description: Run migrations
+    optional: true
+
+test:
+  - command: php bin/phpunit
+    description: Run PHPUnit tests
+  - command: php bin/console lint:container
+    description: Lint service container
+
+build:
+  - command: composer install --no-dev --optimize-autoloader
+    description: Production dependencies
+  - command: php bin/console cache:clear && php bin/console cache:warmup
+    description: Cache for production
+
+deploy:
+  - command: rsync -avz --exclude .git --exclude var ./ {{deploy_host}}:{{deploy_path}}/
+    description: Deploy via rsync
+    optional: true
+
+services:
+  - postgres
+  - mysql
+  - redis
+  - rabbitmq
+  optional: true
+
+artifacts:
+  - Optimized Symfony app (cached)

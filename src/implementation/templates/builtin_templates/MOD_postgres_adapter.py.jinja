@@ -1,0 +1,56 @@
+{#-
+  Hexagonal Architecture — Postgres Adapter template.
+  
+  Variables:
+    element:      the spec Element object
+    pattern_name: "hexagonal"
+    naming:       dict of element_type_prefix → file pattern
+
+  Generates a Postgres adapter in src/adapters/
+-#}
+"""{{ element.title }} — Postgres adapter.
+
+Auto-generated from spec element {{ element.id }}.
+Pattern: {{ pattern_name }} | Layer: adapters | Backend: Postgres
+
+Implements the repository port with PostgreSQL storage.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+
+class {{ element.title | replace(' ', '') | replace('-', '_') }}PostgresAdapter:
+    """PostgreSQL adapter for {{ element.title }}.
+
+    Implements the repository port contract using asyncpg or psycopg.
+    """
+
+    def __init__(self, connection_string: str = "") -> None:
+        self._conn_str = connection_string or "postgresql://localhost:5432/{{ element.id | lower }}"
+
+    async def connect(self) -> None:
+        """Establish database connection."""
+        # TODO: Implement with asyncpg or psycopg
+        raise NotImplementedError("Implement database connection")
+
+    async def disconnect(self) -> None:
+        """Close database connection."""
+        raise NotImplementedError("Implement database disconnect")
+
+    async def get(self, id: str) -> dict[str, Any] | None:
+        """Retrieve entity by ID from PostgreSQL."""
+        raise NotImplementedError("Implement get query")
+
+    async def save(self, entity: dict[str, Any]) -> str:
+        """Insert or update entity in PostgreSQL."""
+        raise NotImplementedError("Implement save query")
+
+    async def delete(self, id: str) -> bool:
+        """Delete entity from PostgreSQL."""
+        raise NotImplementedError("Implement delete query")
+
+    async def list(self, *, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+        """List entities with pagination from PostgreSQL."""
+        raise NotImplementedError("Implement list query")

@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Callable
 
-from src.providers.base import ToolDef
+from src.providers.base import ToolDef, make_tool_params as _params
 
 # ======================================================================
 # Tool functions
@@ -97,8 +97,6 @@ async def answer_question_tool(
 # ======================================================================
 
 
-def _params(props: dict, required: list[str] | None = None) -> dict:
-    return {"type": "object", "properties": props, "required": required or []}
 
 
 QUESTIONS_RO_TOOLS: list[ToolDef] = [

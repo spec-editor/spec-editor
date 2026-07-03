@@ -1,0 +1,52 @@
+# Vue 3 SPA — Vite + TypeScript + Composition API
+#
+# Detection: package.json with vue dependency, vite.config.* with vue plugin.
+
+name: vue_spa
+platform: node
+runtime: node >= 20
+description: >
+  Vue 3 Single Page Application using Vite + TypeScript + Composition API.
+  Pinia for state management, Vue Router for client-side routing.
+
+detection:
+  files:
+    - package.json
+    - vite.config.ts
+    - vite.config.js
+  any_of_config: true
+  frameworks:
+    - vue
+  build_tool:
+    - vite
+
+init:
+  - command: npm ci
+    description: Install dependencies
+  - command: cp .env.example .env
+    description: Copy environment template
+    optional: true
+
+test:
+  - command: npx vitest run --reporter=verbose
+    description: Run unit tests
+    optional: true
+  - command: npx vue-tsc --noEmit
+    description: TypeScript type check
+
+build:
+  - command: npx vue-tsc -b
+    description: TypeScript compilation
+  - command: npx vite build
+    description: Vite production build
+
+deploy:
+  - command: rsync -avz dist/ {{deploy_host}}:{{deploy_path}}/
+    description: Deploy via rsync
+    optional: true
+  - command: npx wrangler pages deploy dist/
+    description: Deploy to Cloudflare Pages
+    optional: true
+
+artifacts:
+  - dist/ directory (static HTML/JS/CSS)

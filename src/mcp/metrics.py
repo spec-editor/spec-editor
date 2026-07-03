@@ -1,12 +1,14 @@
 """MCP module: connectivity metrics calculation and snapshots."""
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 from pydantic import BaseModel, Field
 
 from src.config import get_logger
 from src.storage.adapter import StorageAdapter
 from src.storage.models import ElementStatus, ElementSummary
+from src.storage.queries import load_all_elements
 
 logger = get_logger(__name__)
 
@@ -24,9 +26,28 @@ class MetricsReport(BaseModel):
     cross_aspect_relationships: int = 0
     connectivity_index: float = 0.0
     orphan_elements: int = 0
+    unparented_elements: int = 0
+    unparented_by_aspect: dict[str, int] = Field(default_factory=dict)
     coverage_ratio: float = 0.0
     aspects: dict[str, int] = Field(default_factory=dict)
     by_status: dict[str, int] = Field(default_factory=dict)
+
+    # Cycle metrics.
+    bugs_total: int = 0
+    bugs_open: int = 0
+    bugs_reviewed: int = 0
+    bugs_confirmed: int = 0
+    bugs_resolved: int = 0
+    bugs_critical: int = 0
+    bugs_high: int = 0
+    bugs_medium: int = 0
+    bugs_low: int = 0
+    cycles_completed: int = 0
+    cycles_failed: int = 0
+    last_loop_duration_seconds: float = 0.0
+    last_loop_ts: str = ""
+    requirements_with_bugs: int = 0
+    modules_with_errors: int = 0
 
 
 def compute_metrics(storage: StorageAdapter) -> MetricsReport:
@@ -39,12 +60,7 @@ def compute_metrics(storage: StorageAdapter) -> MetricsReport:
         return MetricsReport()
 
     # Collect full elements
-    elements: list = []
-    for summary in all_summaries:
-        try:
-            elements.append(storage.read_element(summary.id))
-        except Exception:
-            logger.warning("skip_element_for_metrics", element_id=summary.id)
+    elements = load_all_elements(storage)
 
     # Calculate metrics
     total_relationships = 0
@@ -88,14 +104,53 @@ def compute_metrics(storage: StorageAdapter) -> MetricsReport:
         cross_aspect_relationships / total_elements if total_elements > 0 else 0.0
     )
 
-    # Orphans
+    # Orphans — exclude SRC elements (they don't participate in structural relationships)
     orphan_elements = sum(
-        1 for e in elements if not e.parent and not e.children and not e.relationships
+        1
+        for e in elements
+        if not e.id.startswith("SRC-")
+        and not e.parent
+        and not e.children
+        and not e.relationships
     )
 
-    # Coverage
+    # Unparented — elements without parent in hierarchical aspects.
+    # Root types are derived from methodology: first element_type in each aspect.
+    from src.config.methodology import get_root_types, load_methodology
+
+    _ROOT_TYPES: set[str] = set()
+    try:
+        # Derive methodology path from storage's project directory
+        aspects_dir = getattr(storage, '_aspects_path', Path.cwd() / "aspects")
+        method_path = Path(aspects_dir).parent / "methodology.yaml"
+        if method_path.exists():
+            method = load_methodology(method_path)
+            _ROOT_TYPES = get_root_types(method)
+    except Exception:
+        pass
+    if not _ROOT_TYPES:
+        _ROOT_TYPES = {"source"}
+    unparented = 0
+    unparented_by_aspect: dict[str, int] = {}
+    for e in elements:
+        if e.id.startswith("SRC-"):
+            continue
+        if e.element_type in _ROOT_TYPES:
+            continue
+        if e.parent:
+            continue
+        unparented += 1
+        unparented_by_aspect[e.aspect] = unparented_by_aspect.get(e.aspect, 0) + 1
+
+    # Coverage — count reviewed or confirmed as "covered"
+    reviewed_count = by_status.get(ElementStatus.REVIEWED.value, 0)
     confirmed = by_status.get(ElementStatus.CONFIRMED.value, 0)
-    coverage_ratio = confirmed / total_elements if total_elements > 0 else 0.0
+    coverage_ratio = (
+        (reviewed_count + confirmed) / total_elements if total_elements > 0 else 0.0
+    )
+
+    # Cycle metrics.
+    cycle = _compute_cycle_metrics(storage, elements)
 
     return MetricsReport(
         total_elements=total_elements,
@@ -103,9 +158,12 @@ def compute_metrics(storage: StorageAdapter) -> MetricsReport:
         cross_aspect_relationships=cross_aspect_relationships,
         connectivity_index=round(connectivity_index, 4),
         orphan_elements=orphan_elements,
+        unparented_elements=unparented,
+        unparented_by_aspect=unparented_by_aspect,
         coverage_ratio=round(coverage_ratio, 4),
         aspects=aspects_count,
         by_status=by_status,
+        **cycle,
     )
 
 
@@ -120,7 +178,59 @@ def compute_delta(before: MetricsReport, after: MetricsReport) -> dict:
             after.connectivity_index - before.connectivity_index, 4
         ),
         "orphan_elements": after.orphan_elements - before.orphan_elements,
+        "unparented_elements": after.unparented_elements - before.unparented_elements,
         "coverage_ratio": round(after.coverage_ratio - before.coverage_ratio, 4),
+        "bugs_total": after.bugs_total - before.bugs_total,
+        "bugs_resolved": after.bugs_resolved - before.bugs_resolved,
+    }
+
+
+def _compute_cycle_metrics(storage, elements) -> dict:
+    """Compute cycle-specific metrics from specification elements."""
+    bug_elements = [e for e in elements if e.id.startswith("SRC-BUG-")]
+
+    bugs_by_status: dict[str, int] = {}
+    bugs_by_severity: dict[str, int] = {}
+
+    for bug in bug_elements:
+        bugs_by_status[bug.status.value] = bugs_by_status.get(bug.status.value, 0) + 1
+        for tag in bug.tags:
+            if tag in ("critical", "high", "medium", "low"):
+                bugs_by_severity[tag] = bugs_by_severity.get(tag, 0) + 1
+                break
+
+    # Count non-source elements that derive from any SRC-BUG-*.
+    bug_ids = {b.id for b in bug_elements}
+    requirements_with_bugs = sum(
+        1
+        for e in elements
+        if not e.id.startswith("SRC-") and any(ref in bug_ids for ref in e.derived_from)
+    )
+
+    # Modules with active (draft/reviewed) bugs.
+    modules_with_errors: set[str] = set()
+    for bug in bug_elements:
+        if bug.status.value in ("draft", "reviewed"):
+            for ref in bug.derived_from:
+                if ref.startswith("MOD-"):
+                    modules_with_errors.add(ref)
+
+    return {
+        "bugs_total": len(bug_elements),
+        "bugs_open": bugs_by_status.get("draft", 0),
+        "bugs_reviewed": bugs_by_status.get("reviewed", 0),
+        "bugs_confirmed": bugs_by_status.get("confirmed", 0),
+        "bugs_resolved": bugs_by_status.get("deprecated", 0),
+        "bugs_critical": bugs_by_severity.get("critical", 0),
+        "bugs_high": bugs_by_severity.get("high", 0),
+        "bugs_medium": bugs_by_severity.get("medium", 0),
+        "bugs_low": bugs_by_severity.get("low", 0),
+        "cycles_completed": 0,
+        "cycles_failed": 0,
+        "last_loop_duration_seconds": 0.0,
+        "last_loop_ts": "",
+        "requirements_with_bugs": requirements_with_bugs,
+        "modules_with_errors": len(modules_with_errors),
     }
 
 

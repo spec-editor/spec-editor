@@ -34,7 +34,7 @@ stays aligned with your requirements.
 
 > [!NOTE]
 > Spec Editor works with any OpenAI-compatible API (DeepSeek, OpenAI, Anthropic).
-> Default: DeepSeek ($0.14/M tokens).
+> Default: DeepSeek Reasoner (~$0.55/M tokens, 5× cheaper than GPT-4).
 
 ---
 

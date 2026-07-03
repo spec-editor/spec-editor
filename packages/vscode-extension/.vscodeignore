@@ -1,0 +1,11 @@
+# Exclude development files
+.vscode/**
+.git/**
+src/**
+tsconfig.json
+tsconfig.test.json
+*.vsix
+node_modules/**
+*.bak
+*.bak2
+*.map

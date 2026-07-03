@@ -1,0 +1,120 @@
+# Coding Agent Workflow — declarative definition.
+#
+# Principles enforced by this workflow:
+#   - TDD: tests before implementation
+#   - OOP: classes, single responsibility
+#   - DRY: no code duplication
+#   - No hardcoding: constants → config, assumptions → escalation
+
+workflow:
+  name: coding_agent
+  version: "1.0"
+  description: >
+    Coding agent workflow: read spec requirements, plan implementation,
+    write tests first (TDD), escalate unclear decisions, implement code,
+    verify with tests and @implements checks, report completion.
+
+  state:
+    task: ""
+    module_id: ""
+
+  steps:
+    # ── Phase 1: Understand ──
+    - id: read_requirements
+      tool: read_element
+      params:
+        element_id: "{{state.task}}"
+      description: "Read the specification requirement (NFR, MOD, STP)"
+
+    - id: read_context
+      tool: get_context_for_file
+      params:
+        file_path: "{{state.module_id}}"
+      description: "Get existing spec context for the target module"
+
+    - id: read_codebase
+      tool: read_file
+      params:
+        path: "src/"
+      description: "Read existing source files to understand patterns and avoid duplication"
+
+    # ── Phase 2: Plan ──
+    - id: plan_approach
+      tool: request_clarification
+      params:
+        question: >
+          TDD Plan for {{state.task}}:
+          1. What test file will be created?
+          2. What class(es) will be implemented?
+          3. What constants/config values need extracting?
+          4. What assumptions are being made?
+          Proceed with implementation after confirmation.
+      description: "Present TDD plan and ask for confirmation before coding"
+
+    # ── Phase 3: Test-first (TDD) ──
+    - id: write_tests
+      tool: write_file
+      params:
+        path: "tests/test_{{state.module_id|lower|replace('-','_')}}.py"
+      description: >
+        Write tests FIRST before any implementation code.
+        Tests must cover: happy path, edge cases, error handling,
+        and the specific requirement from {{state.task}}.
+
+    - id: run_tests_red
+      tool: terminal
+      params:
+        command: "pytest tests/ -x --no-header -q 2>&1 | tail -5"
+      description: "Run tests — expect RED (failures, since no implementation yet)"
+
+    # ── Phase 4: Escalate questions ──
+    - id: escalate_questions
+      tool: request_clarification
+      params:
+        question: >
+          Before implementing {{state.task}}, please confirm:
+          - What should be the default values for any constants?
+          - What configuration keys should be used?
+          - Are there any naming conventions to follow?
+          - Any assumptions that need validation?
+      description: "Escalate unresolved design decisions before writing code"
+
+    # ── Phase 5: Implement ──
+    - id: implement
+      tool: write_file
+      params:
+        path: "src/"
+      description: >
+        Implement the requirement. CRITICAL RULES:
+        - OOP: use classes with single responsibility.
+        - DRY: reuse existing code; extract shared logic into helpers.
+        - NO HARDCODING: put constants in config, magic numbers in named vars.
+        - Add @implements("{{state.task}}") on every new class/function.
+        - Add StructuredLogEmitter(module_id="{{state.module_id}}") to new modules.
+        - Handle errors with try/except + log.exception().
+
+    # ── Phase 6: Verify ──
+    - id: run_tests_green
+      tool: terminal
+      params:
+        command: "pytest tests/ -x --no-header -q 2>&1 | tail -10"
+      description: "Run tests — expect GREEN (all pass after implementation)"
+
+    - id: verify_traceability
+      tool: verify_implements
+      params:
+        file_path: "src/"
+      description: "Verify @implements coverage on changed files"
+
+    - id: check_lints
+      tool: read_lints
+      params:
+        file_path: "src/"
+      description: "Check for linting errors — fix if any"
+
+    # ── Phase 7: Report ──
+    - id: report
+      tool: terminal
+      params:
+        command: "echo 'Coding complete: {{state.task}}'"
+      description: "Report completion: files changed, tests passed, requirements covered"
