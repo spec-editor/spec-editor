@@ -1,0 +1,62 @@
+{#-
+  Hexagonal Architecture — REST Service adapter template.
+
+  Generates a FastAPI/Flask REST adapter in src/adapters/
+-#}
+"""{{ element.title }} — REST API adapter.
+
+Auto-generated from spec element {{ element.id }}.
+Pattern: hexagonal | Layer: adapters | Transport: HTTP/REST
+"""
+
+from __future__ import annotations
+
+from typing import Any
+{% if extra.ports %}
+{% for port in extra.ports %}
+from src.ports.{{ element.id.lower() }}_{{ port }}_port import {{ element.title | replace(' ', '') | replace('-', '_') }}{{ port | title }}Port
+{% endfor %}
+{% endif %}
+
+# Use FastAPI or Flask — choose based on project preferences.
+try:
+    from fastapi import APIRouter, HTTPException, Depends
+    USE_FASTAPI = True
+except ImportError:
+    USE_FASTAPI = False
+
+
+{% if extra.ports %}
+class {{ element.title | replace(' ', '') | replace('-', '_') }}RESTAdapter:
+    """REST API adapter for {{ element.title }}.
+
+    Exposes {{ element.id }} functionality via HTTP endpoints.
+    """
+
+    def __init__(
+        self,
+{% for port in extra.ports %}
+        {{ port }}: {{ element.title | replace(' ', '') | replace('-', '_') }}{{ port | title }}Port,
+{% endfor %}
+    ) -> None:
+{% for port in extra.ports %}
+        self._{{ port }} = {{ port }}
+{% endfor %}
+
+{% if extra.ports %}
+    def register_routes(self, router: APIRouter) -> None:
+        """Register all REST endpoints on the given router."""
+        # TODO: Add route definitions here.
+        # Example:
+        # @router.get("/{{ element.id.lower() }}/{id}")
+        # async def get_{{ element.id.lower() }}(id: str):
+        #     result = await self._repository.get(id)
+        #     if result is None:
+        #         raise HTTPException(status_code=404)
+        #     return result
+        pass
+{% endif %}
+{% else %}
+# No ports defined — implement REST endpoints directly.
+# Add route handlers for {{ element.id }} operations.
+{% endif %}

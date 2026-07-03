@@ -1,0 +1,29 @@
+# Spec Editor MCP Server
+# =============================================================================
+FROM python:3.12-slim
+
+LABEL org.opencontainers.image.title="Spec Editor MCP Server"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Dependencies (cached unless requirements.txt changes)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Source code
+COPY pyproject.toml README.md VERSION ./
+COPY src/ src/
+COPY data/ data/
+
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV SPEC_EDITOR_MOUNT_HOST=/Users/dmitry/Documents/Droid
+ENV SPEC_EDITOR_MOUNT_CONTAINER=/projects
+
+EXPOSE 8088
+
+CMD ["python", "-u", "-m", "src.main", "mcp", "--transport", "http", "--host", "0.0.0.0", "--port", "8088"]

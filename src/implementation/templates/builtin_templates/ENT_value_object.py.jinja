@@ -1,0 +1,53 @@
+{#-
+  DDD Value Object template — immutable, no identity, equality by value.
+-#}
+"""{{ element.title }} — DDD Value Object.
+
+Auto-generated from spec element {{ element.id }}.
+Pattern: hexagonal + DDD | Layer: domain | DDD type: value_object
+
+A Value Object has no identity — it is immutable and equality is
+determined by comparing all attributes.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+
+@dataclass(frozen=True)  # frozen=True → immutable
+class {{ element.title | replace(' ', '') | replace('-', '_') }}:
+    """{{ element.content | default('Value object — immutable, no identity, equality by value.') }}"""
+
+    value: Any = field(default=None)
+    # TODO: Replace with actual attributes.
+    # Example:
+    #   amount: Money
+    #   currency: Currency
+
+    def __post_init__(self) -> None:
+        """Validate invariants on construction."""
+        # TODO: Add validation.
+        # Example:
+        # if self.amount < 0:
+        #     raise ValueError("Amount must be non-negative")
+        pass
+
+    # ── Equality (by value, not identity) ──
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, {{ element.title | replace(' ', '') | replace('-', '_') }}):
+            return False
+        return self.value == other.value  # Compare all fields
+
+    def __hash__(self) -> int:
+        return hash(self.value)  # Hash all fields
+
+    # ── Factory methods ──
+
+    @classmethod
+    def create(cls, **kwargs: Any) -> "{{ element.title | replace(' ', '') | replace('-', '_') }}":
+        """Factory method with validation."""
+        # TODO: Add creation logic.
+        return cls(**kwargs)

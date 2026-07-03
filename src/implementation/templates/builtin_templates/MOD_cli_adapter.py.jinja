@@ -1,0 +1,36 @@
+{#-
+  CLI tool template — generates a Click/Typer CLI command adapter.
+-#}
+"""{{ element.title }} — CLI adapter.
+
+Auto-generated from spec element {{ element.id }}.
+Pattern: hexagonal | Layer: adapters | Transport: CLI
+"""
+
+from __future__ import annotations
+
+from typing import Any
+import click
+
+
+@click.group(name="{{ element.id.lower() }}")
+def cli() -> None:
+    """{{ element.title }} — {{ element.content | default('CLI interface') | truncate(80) }}"""
+    pass
+
+
+@cli.command(name="run")
+@click.option("--input", "-i", help="Input data")
+@click.option("--verbose", "-v", is_flag=True, help="Verbose output")
+def run_command(input: str | None, verbose: bool) -> None:
+    """Execute {{ element.title }} operation.
+
+    TODO: Implement the main execution logic.
+    """
+    click.echo(f"{{ element.id }}: running with input={input}")
+    # Implement business logic here.
+    raise NotImplementedError("Implement CLI logic for {{ element.id }}")
+
+
+if __name__ == "__main__":
+    cli()

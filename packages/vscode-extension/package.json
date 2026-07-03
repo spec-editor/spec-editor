@@ -1,0 +1,610 @@
+{
+  "name": "spec-editor-vscode",
+  "displayName": "Spec Editor",
+  "description": "AI-powered requirements engineering with structured specs in your editor",
+  "version": "0.1.0",
+  "publisher": "spec-editor",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/zed-industries/spec-editor",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Data Science"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:specEditor.open",
+    "onCommand:specEditor.newProject",
+    "onCommand:specEditor.viewDiagram",
+    "onCommand:specEditor.exportSpec"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "specEditor.open",
+        "title": "Spec Editor: Open Project",
+        "icon": "$(file-submodule)"
+      },
+      {
+        "command": "specEditor.newProject",
+        "title": "Spec Editor: New Project"
+      },
+      {
+        "command": "specEditor.viewDiagram",
+        "title": "Spec Editor: View Diagram"
+      },
+      {
+        "command": "specEditor.validate",
+        "title": "Spec Editor: Validate Requirements"
+      },
+      {
+        "command": "specEditor.openSettings",
+        "title": "Spec Editor: Settings",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "specEditor.restartMcp",
+        "title": "Spec Editor: Restart MCP Server",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "specEditor.run",
+        "title": "Spec Editor: Run",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "specEditor.runPending",
+        "title": "Spec Editor: Run (no changes)",
+        "icon": "$(play)"
+      },
+      {
+        "command": "specEditor.reengineer",
+        "title": "Spec Editor: Reengineer",
+        "icon": "$(debug-rerun)"
+      },
+      {
+        "command": "specEditor.stopRun",
+        "title": "Spec Editor: Stop",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "specEditor.setApiKey",
+        "title": "Spec Editor: Set API Key",
+        "icon": "$(key)"
+      },
+      {
+        "command": "specEditor._openMethodology",
+        "title": "Open Methodology File"
+      },
+      {
+        "command": "specEditor.createElement",
+        "title": "Spec Editor: Create Element",
+        "icon": "$(add)"
+      },
+      {
+        "command": "specEditor.editElement",
+        "title": "Spec Editor: Edit Element",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "specEditor.deleteElement",
+        "title": "Spec Editor: Delete Element",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "specEditor.showLog",
+        "title": "Spec Editor: Show Log"
+      },
+      {
+        "command": "specEditor.resetProject",
+        "title": "Spec Editor: Reset Project",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "specEditor.filterByAspect",
+        "title": "Aspect"
+      },
+      {
+        "command": "specEditor.filterByRelation",
+        "title": "Relation"
+      },
+      {
+        "command": "specEditor.exportSpec",
+        "title": "Spec Editor: Export Specification",
+        "icon": "$(export)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "spec-editor-sidebar",
+          "title": "Spec Editor",
+          "icon": "$(checklist)"
+        }
+      ]
+    },
+    "views": {
+      "spec-editor-sidebar": [
+        {
+          "id": "specEditor.treeView",
+          "name": "Specification"
+        }
+      ]
+    },
+    "configuration": [
+      {
+        "title": "Spec Editor — MCP Server",
+        "properties": {
+          "specEditor.mcpPort": {
+            "type": "number",
+            "default": 8088,
+            "minimum": 1024,
+            "maximum": 65535,
+            "order": 10,
+            "markdownDescription": "TCP port for the MCP server. Requires reload."
+          },
+          "specEditor.pythonPath": {
+            "type": "string",
+            "default": "python3",
+            "order": 20,
+            "markdownDescription": "Path to Python 3 with spec-editor installed."
+          },
+          "specEditor.autoStartMcp": {
+            "type": "boolean",
+            "default": true,
+            "order": 30,
+            "markdownDescription": "Auto-start MCP server on extension activation."
+          },
+          "specEditor.mcpMode": {
+            "type": "string",
+            "default": "local",
+            "enum": [
+              "local",
+              "docker"
+            ],
+            "enumDescriptions": [
+              "Extension spawns MCP as child Python process",
+              "Extension connects to existing MCP server"
+            ],
+            "order": 40,
+            "markdownDescription": "How the MCP server is started."
+          },
+          "specEditor.restartMcp": {
+            "type": "null",
+            "default": null,
+            "order": 50,
+            "markdownDescription": "[🔄 Restart MCP Server](command:specEditor.restartMcp)"
+          },
+          "specEditor.restrictSourceDeletion": {
+            "type": "boolean",
+            "default": true,
+            "order": 45,
+            "markdownDescription": "Prevent deletion of source requirement elements (SRC-*). When enabled, AI agents cannot delete ingested source documents."
+          }
+        }
+      },
+      {
+        "title": "Spec Editor — Reasoning Model",
+        "properties": {
+          "specEditor.reasoningModel.provider": {
+            "type": "string",
+            "default": "deepseek",
+            "enum": [
+              "openai",
+              "anthropic",
+              "deepseek",
+              "google",
+              "groq",
+              "ollama"
+            ],
+            "enumDescriptions": [
+              "OpenAI (GPT models)",
+              "Anthropic (Claude models)",
+              "DeepSeek (deepseek-chat, reasoner)",
+              "Google (Gemini models)",
+              "Groq (fast inference — Llama, Mixtral)",
+              "Ollama (local models)"
+            ],
+            "order": 5,
+            "markdownDescription": "LLM provider for the reasoning model (used by analyst, PM, and coding agents for complex tasks)."
+          },
+          "specEditor.reasoningModel.model": {
+            "type": "string",
+            "default": "deepseek/deepseek-reasoner",
+            "enum": [
+              "gpt-4o",
+              "gpt-4o-mini",
+              "gpt-4-turbo",
+              "o1",
+              "o1-mini",
+              "o3-mini",
+              "claude-sonnet-4-20250514",
+              "claude-3-haiku-20240307",
+              "claude-3-5-sonnet-20241022",
+              "deepseek/deepseek-chat",
+              "deepseek/deepseek-reasoner",
+              "gemini/gemini-2.5-flash",
+              "gemini/gemini-2.5-pro",
+              "gemini/gemini-2.0-flash",
+              "groq/llama-3.3-70b-versatile",
+              "groq/llama-3.1-8b-instant",
+              "groq/mixtral-8x7b-32768",
+              "ollama/llama3",
+              "ollama/mistral",
+              "ollama/codellama"
+            ],
+            "order": 10,
+            "markdownDescription": "Model name for this agent."
+          },
+          "specEditor.reasoningModel.temperature": {
+            "type": "number",
+            "default": 0.7,
+            "minimum": 0,
+            "maximum": 2,
+            "order": 30,
+            "markdownDescription": "Temperature (0.0–2.0) for the reasoning model."
+          },
+          "specEditor.reasoningModel.maxTokens": {
+            "type": "number",
+            "default": 4096,
+            "order": 40,
+            "markdownDescription": "Max tokens per response for the reasoning model."
+          }
+        }
+      },
+      {
+        "title": "Spec Editor — Chat Model",
+        "properties": {
+          "specEditor.chatModel.provider": {
+            "type": "string",
+            "default": "deepseek",
+            "enum": [
+              "openai",
+              "anthropic",
+              "deepseek",
+              "google",
+              "groq",
+              "ollama"
+            ],
+            "enumDescriptions": [
+              "OpenAI (GPT models)",
+              "Anthropic (Claude models)",
+              "DeepSeek (deepseek-chat, reasoner)",
+              "Google (Gemini models)",
+              "Groq (fast inference — Llama, Mixtral)",
+              "Ollama (local models)"
+            ],
+            "order": 5,
+            "markdownDescription": "LLM provider for the chat model (used by DevOps for deployment scripts and simpler tasks)."
+          },
+          "specEditor.chatModel.model": {
+            "type": "string",
+            "default": "deepseek/deepseek-chat",
+            "enum": [
+              "gpt-4o",
+              "gpt-4o-mini",
+              "gpt-4-turbo",
+              "o1",
+              "o1-mini",
+              "o3-mini",
+              "claude-sonnet-4-20250514",
+              "claude-3-haiku-20240307",
+              "claude-3-5-sonnet-20241022",
+              "deepseek/deepseek-chat",
+              "deepseek/deepseek-reasoner",
+              "gemini/gemini-2.5-flash",
+              "gemini/gemini-2.5-pro",
+              "gemini/gemini-2.0-flash",
+              "groq/llama-3.3-70b-versatile",
+              "groq/llama-3.1-8b-instant",
+              "groq/mixtral-8x7b-32768",
+              "ollama/llama3",
+              "ollama/mistral",
+              "ollama/codellama"
+            ],
+            "order": 10,
+            "markdownDescription": "Model name for this agent."
+          },
+          "specEditor.chatModel.temperature": {
+            "type": "number",
+            "default": 0.7,
+            "minimum": 0,
+            "maximum": 2,
+            "order": 30,
+            "markdownDescription": "Temperature (0.0–2.0) for the chat model."
+          },
+          "specEditor.chatModel.maxTokens": {
+            "type": "number",
+            "default": 4096,
+            "order": 40,
+            "markdownDescription": "Max tokens per response for the chat model."
+          }
+        }
+      },
+      {
+        "title": "Spec Editor — Orchestrator",
+        "properties": {
+          "specEditor.orchestrator.provider": {
+            "type": "string",
+            "default": "openai",
+            "enum": [
+              "openai",
+              "anthropic",
+              "deepseek",
+              "google",
+              "groq",
+              "ollama"
+            ],
+            "enumDescriptions": [
+              "OpenAI (GPT models)",
+              "Anthropic (Claude models)",
+              "DeepSeek (deepseek-chat, reasoner)",
+              "Google (Gemini models)",
+              "Groq (fast inference — Llama, Mixtral)",
+              "Ollama (local models)"
+            ],
+            "order": 5,
+            "markdownDescription": "LLM provider for this agent."
+          },
+          "specEditor.orchestrator.model": {
+            "type": "string",
+            "default": "gpt-4o",
+            "enum": [
+              "gpt-4o",
+              "gpt-4o-mini",
+              "gpt-4-turbo",
+              "o1",
+              "o1-mini",
+              "o3-mini",
+              "claude-sonnet-4-20250514",
+              "claude-3-haiku-20240307",
+              "claude-3-5-sonnet-20241022",
+              "deepseek/deepseek-chat",
+              "deepseek/deepseek-reasoner",
+              "gemini/gemini-2.5-flash",
+              "gemini/gemini-2.5-pro",
+              "gemini/gemini-2.0-flash",
+              "groq/llama-3.3-70b-versatile",
+              "groq/llama-3.1-8b-instant",
+              "groq/mixtral-8x7b-32768",
+              "ollama/llama3",
+              "ollama/mistral",
+              "ollama/codellama"
+            ],
+            "order": 10,
+            "markdownDescription": "Model name for this agent."
+          },
+          "specEditor.orchestrator.temperature": {
+            "type": "number",
+            "default": 0.7,
+            "minimum": 0,
+            "maximum": 2,
+            "order": 30,
+            "markdownDescription": "Temperature (0.0–2.0) for Orchestrator."
+          },
+          "specEditor.orchestrator.maxTokens": {
+            "type": "number",
+            "default": 4096,
+            "order": 40,
+            "markdownDescription": "Max tokens per response for Orchestrator."
+          }
+        }
+      },
+      {
+        "title": "Spec Editor — Dialogue Limits",
+        "properties": {
+          "specEditor.maxRounds": {
+            "type": "number",
+            "default": 20,
+            "order": 10,
+            "markdownDescription": "Max dialogue rounds."
+          },
+          "specEditor.maxTimeMinutes": {
+            "type": "number",
+            "default": 480,
+            "order": 20,
+            "markdownDescription": "Max dialogue duration in minutes."
+          },
+          "specEditor.maxAgents": {
+            "type": "number",
+            "default": 8,
+            "order": 30,
+            "markdownDescription": "Max concurrent agents."
+          },
+          "specEditor.maxLlmCalls": {
+            "type": "number",
+            "default": 30,
+            "order": 40,
+            "markdownDescription": "Max LLM calls per run()."
+          },
+          "specEditor.tokenBudget": {
+            "type": "number",
+            "default": 50000,
+            "order": 50,
+            "markdownDescription": "Token budget before auto-compaction."
+          }
+        }
+      },
+      {
+        "title": "Spec Editor — Timeouts",
+        "properties": {
+          "specEditor.llmRequestTimeout": {
+            "type": "number",
+            "default": 90,
+            "order": 10,
+            "markdownDescription": "Single LLM request timeout (seconds)."
+          },
+          "specEditor.llmTotalTimeout": {
+            "type": "number",
+            "default": 90,
+            "order": 20,
+            "markdownDescription": "Total timeout with retry (seconds)."
+          }
+        }
+      },
+      {
+        "title": "Spec Editor — UI",
+        "properties": {
+          "specEditor.zoomSensitivity": {
+            "type": "number",
+            "default": 1,
+            "minimum": 0.1,
+            "maximum": 100,
+            "order": 10,
+            "markdownDescription": "Zoom sensitivity for diagrams (mouse wheel / macOS touchpad). Higher = faster zoom. Range: 0.1–100."
+          },
+          "specEditor.diagramEngine": {
+            "type": "string",
+            "default": "template",
+            "enum": [
+              "template",
+              "local_llm"
+            ],
+            "enumDescriptions": [
+              "Template-based (fast, deterministic)",
+              "Local LLM via Ollama (Qwen2.5-Coder:7b, offline, smarter layout)"
+            ],
+            "order": 20,
+            "markdownDescription": "Diagram generation engine. `template` uses predefined Mermaid templates (fast). `local_llm` uses a local AI model via Ollama for smarter layouts (requires `ollama pull qwen2.5-coder:7b`)."
+          }
+        }
+      },
+      {
+        "title": "Spec Editor — Advanced",
+        "properties": {
+          "specEditor.adaptiveVoting": {
+            "type": "boolean",
+            "default": false,
+            "order": 10,
+            "markdownDescription": "Auto-select voting strategy by task context."
+          },
+          "specEditor.logLevel": {
+            "type": "string",
+            "default": "INFO",
+            "enum": [
+              "DEBUG",
+              "INFO",
+              "WARNING",
+              "ERROR"
+            ],
+            "order": 20,
+            "markdownDescription": "Log level for the spec-editor backend."
+          },
+          "specEditor.logJson": {
+            "type": "boolean",
+            "default": false,
+            "order": 30,
+            "markdownDescription": "Use JSON format for logs."
+          },
+          "specEditor.apiKey": {
+            "type": "string",
+            "default": "",
+            "order": 5,
+            "markdownDescription": "API key for LLM provider. **Stored in VSCode settings — do not commit to git.** Use a workspace-local `.vscode/settings.json` for safety."
+          },
+          "specEditor.openMethodology": {
+            "type": "null",
+            "default": null,
+            "order": 1,
+            "markdownDescription": "[📄 Open methodology.yaml](command:specEditor._openMethodology)"
+          }
+        }
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "specEditor.createElement",
+          "when": "view == specEditor.treeView",
+          "group": "navigation@0"
+        },
+        {
+          "command": "specEditor.openSettings",
+          "when": "view == specEditor.treeView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "specEditor.run",
+          "when": "view == specEditor.treeView && !specEditor.runActive && specEditor.pendingChanges && specEditor.projectLoaded",
+          "group": "navigation@3"
+        },
+        {
+          "command": "specEditor.reengineer",
+          "when": "view == specEditor.treeView && !specEditor.runActive && specEditor.projectLoaded",
+          "group": "navigation@3"
+        },
+        {
+          "command": "specEditor.stopRun",
+          "when": "view == specEditor.treeView && specEditor.runActive",
+          "group": "navigation@3"
+        },
+        {
+          "command": "specEditor.runPending",
+          "when": "view == specEditor.treeView && !specEditor.runActive && (!specEditor.pendingChanges || !specEditor.projectLoaded)",
+          "group": "navigation@3"
+        },
+        {
+          "command": "specEditor.filterByAspect",
+          "when": "view == specEditor.treeView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "specEditor.filterByRelation",
+          "when": "view == specEditor.treeView",
+          "group": "navigation@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "specEditor.editElement",
+          "when": "view == specEditor.treeView && viewItem == element",
+          "group": "inline"
+        },
+        {
+          "command": "specEditor.editElement",
+          "when": "view == specEditor.treeView && viewItem == element",
+          "group": "1_modify@1"
+        },
+        {
+          "command": "specEditor.deleteElement",
+          "when": "view == specEditor.treeView && viewItem == element",
+          "group": "1_modify@2"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "specEditor.treeView",
+        "contents": "No spec-editor project loaded.\n[Open Project](command:specEditor.open)\n\nOr create a new one:\n[New Project](command:specEditor.newProject)",
+        "when": "!specEditor.projectLoaded"
+      },
+      {
+        "view": "specEditor.treeView",
+        "contents": "Project is empty. Start by selecting a methodology:\n[Select Methodology](command:specEditor.selectMethodology)",
+        "when": "specEditor.projectLoaded && specEditor.treeEmpty"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "node esbuild.config.js",
+    "watch": "node esbuild.config.js --watch",
+    "build": "node esbuild.config.js --production && cd ../frontend && npm run export && cp -r out ../vscode-extension/dist/",
+    "typecheck": "tsc --noEmit",
+    "package": "npm run build && vsce package --no-dependencies && code --install-extension spec-editor-vscode-0.1.0.vsix --force",
+    "lint": "eslint src/",
+    "test-e2e": "node src/test/runTests.js"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.0",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^3.0.0",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.24.0",
+    "mocha": "^10.0.0",
+    "typescript": "^5.3.0"
+  }
+}

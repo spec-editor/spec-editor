@@ -26,6 +26,7 @@ _FRONTMATTER_FIELDS: tuple[str, ...] = (
     "provenance",
     "derived_from",
     "covered_by",
+    "implementation_architect",
 )
 
 
@@ -37,7 +38,7 @@ def parse_md_file(path: Path) -> Element:
         ValueError: invalid YAML frontmatter or missing required fields
     """
     if not path.exists():
-        raise FileNotFoundError(f"Operation completed successfully: {path}")
+        raise FileNotFoundError(f"Element file not found: {path}")
 
     with open(path, encoding="utf-8") as f:
         post = frontmatter.load(f)
@@ -97,6 +98,9 @@ def element_to_frontmatter(element: Element) -> dict:
     if element.covered_by:
         data["covered_by"] = element.covered_by
 
+    if element.implementation_architect is not None:
+        data["implementation_architect"] = element.implementation_architect
+
     return data
 
 
@@ -134,6 +138,9 @@ def frontmatter_to_element(fm: dict, content: str) -> Element:
     provenance_raw = fm.get("provenance")
     provenance = Provenance(**provenance_raw) if provenance_raw else None
 
+    # Parse implementation_architect decisions (optional structured block)
+    impl_architect = fm.get("implementation_architect")
+
     return Element(
         aspect=fm.get("aspect", ""),
         element_type=fm.get("element_type", ""),
@@ -147,5 +154,6 @@ def frontmatter_to_element(fm: dict, content: str) -> Element:
         provenance=provenance,
         derived_from=fm.get("derived_from", []),
         covered_by=fm.get("covered_by", []),
+        implementation_architect=impl_architect,
         content=content.strip(),
     )

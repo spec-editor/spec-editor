@@ -214,7 +214,12 @@ class Analyzer:
         existing = [s.id for s in self._storage.list_all() if s.id.startswith("SRC-")]
         if not existing:
             return 1
-        nums = [int(eid.split("-")[1]) for eid in existing if "-" in eid]
+        nums = []
+        for eid in existing:
+            try:
+                nums.append(int(eid.split("-")[1]))
+            except (ValueError, IndexError):
+                pass
         return max(nums) + 1 if nums else 1
 
     def analyze(self, processed: list[ProcessedFile]) -> AnalysisReport:

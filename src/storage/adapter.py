@@ -27,13 +27,24 @@ class StorageAdapter(ABC):
         ...
 
     @abstractmethod
-    def list_aspect(self, aspect_name: str) -> list[ElementSummary]:
-        """Get a list of all elements in an aspect (summary form)."""
+    def list_aspect(self, aspect_name: str, offset: int = 0, limit: int = 0) -> list[ElementSummary]:
+        """Get a list of all elements in an aspect (summary form).
+
+        Args:
+            aspect_name: Name of the aspect
+            offset: Number of results to skip (0 = no skip)
+            limit: Max results to return (0 = no limit)
+        """
         ...
 
     @abstractmethod
-    def list_all(self) -> list[ElementSummary]:
-        """Get a list of all project elements (summary form)."""
+    def list_all(self, offset: int = 0, limit: int = 0) -> list[ElementSummary]:
+        """Get a list of all project elements (summary form).
+
+        Args:
+            offset: Number of results to skip (0 = no skip)
+            limit: Max results to return (0 = no limit)
+        """
         ...
 
     @abstractmethod
@@ -42,13 +53,28 @@ class StorageAdapter(ABC):
         ...
 
     @abstractmethod
-    def search(self, query: str) -> list[ElementSummary]:
-        """Full-text search across elements."""
+    def search(self, query: str, offset: int = 0, limit: int = 0) -> list[ElementSummary]:
+        """Full-text search across elements.
+
+        Args:
+            query: Search string
+            offset: Number of results to skip (0 = no skip)
+            limit: Max results to return (0 = no limit)
+        """
         ...
 
     @abstractmethod
     def get_element_path(self, element_id: str) -> str | None:
         """Get the file path of an element by ID (for debugging)."""
+        ...
+
+    def count_all(self) -> int:
+        """Get total element count without loading summaries (scalability)."""
+        return len(self.list_all())
+
+    @abstractmethod
+    def count_aspect(self, aspect_name: str) -> int:
+        """Get element count for a specific aspect without loading summaries."""
         ...
 
     @abstractmethod

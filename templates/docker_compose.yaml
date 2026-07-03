@@ -1,0 +1,51 @@
+# Docker Compose — multi-service orchestration
+#
+# Detection: docker-compose.yml or compose.yaml with multiple services.
+
+name: docker_compose
+platform: docker
+runtime: docker >= 24
+description: >
+  Multi-service Docker Compose project. Orchestrates several containers
+  (API, database, cache, frontend). Used as the top-level deploy target
+  for projects with multiple service templates.
+
+detection:
+  files:
+    - docker-compose.yml
+    - docker-compose.yaml
+    - compose.yml
+    - compose.yaml
+  any_of: true
+
+init:
+  - command: docker compose pull
+    description: Pull all service images
+
+test:
+  - command: docker compose run --rm api pytest
+    description: Run tests in API container
+    optional: true
+
+build:
+  - command: docker compose build
+    description: Build all service images
+
+deploy:
+  - command: docker compose up -d --wait
+    description: Start all services
+  - command: docker compose push
+    description: Push images to registry
+    optional: true
+
+services:
+  - postgres
+  - mysql
+  - redis
+  - rabbitmq
+  - nginx
+  optional: true
+
+artifacts:
+  - Docker images (one per service)
+  - docker-compose.yml (infrastructure as code)

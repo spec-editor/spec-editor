@@ -53,7 +53,7 @@ class AgentRole:
 
     @classmethod
     def cross_aspect_agent(cls, name: str = "cross_aspect") -> "AgentRole":
-        """Cross-aspect relationship agent — only creates connections between aspects."""
+        """Cross-aspect relationship agent — specialises in creating connections between aspects."""
         return cls(name=name, writable=True, prompt=get_cross_aspect_prompt())
 
     @classmethod

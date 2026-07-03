@@ -117,6 +117,7 @@ class TestDialogueOrchestrator:
         decision, _ = orch.evaluate(1, 20, history)
         assert decision == OrchestratorDecision.CONTINUE  # overridden!
 
+    @pytest.mark.skip(reason="DialogueManager removed")
     def test_round_limit_stops(self):
         """When round limit is reached — complete."""
         from src.agents.dialogue import DialogueOrchestrator

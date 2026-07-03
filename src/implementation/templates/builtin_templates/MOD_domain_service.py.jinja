@@ -1,0 +1,61 @@
+{#-
+  Hexagonal Architecture — Domain Service template.
+  
+  Variables:
+    element:      the spec Element object
+    pattern_name: "hexagonal"
+    naming:       dict of element_type_prefix → file pattern
+    extra:        extra_context dict
+
+  Generates a domain service file in src/domain/
+-#}
+"""{{ element.title }} — domain service.
+
+Auto-generated from spec element {{ element.id }}.
+Pattern: {{ pattern_name }} | Layer: domain
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Protocol
+
+
+# ------------------------------------------------------------------
+# Ports (interfaces this domain service depends on)
+# ------------------------------------------------------------------
+{% if extra.ports %}
+{% for port in extra.ports %}
+class {{ port | title }}Port(Protocol):
+    """Port: {{ port }} — interface for {{ element.id }}."""
+    pass
+
+{% endfor %}
+{% else %}
+# No ports defined — add Protocol classes for dependencies.
+{% endif %}
+
+
+# ------------------------------------------------------------------
+# Domain Service
+# ------------------------------------------------------------------
+
+@dataclass
+class {{ element.title | replace(' ', '') | replace('-', '_') }}:
+    """{{ element.content | default('Domain service — implement business logic here.') }}"""
+
+{% if extra.ports %}
+{% for port in extra.ports %}
+    _{{ port }}: {{ port | title }}Port
+{% endfor %}
+{% endif %}
+
+    async def execute(self, **kwargs: Any) -> Any:
+        """Main entry point. Implement business logic here.
+
+        Raises:
+            NotImplementedError: Replace with actual implementation.
+        """
+        raise NotImplementedError(
+            "Implement business logic for {{ element.id }}"
+        )

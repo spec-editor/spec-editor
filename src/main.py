@@ -10,13 +10,14 @@ from rich.panel import Panel
 
 load_dotenv()  # load .env with API keys
 
-from src.agents.dialogue import DialogueManager
+from src.agents.dialogue_manager import DialogueManager
 from src.agents.orchestrator import OrchestratorDecision
 from src.agents.spec_agent import SpecAgent
 from src.cli.commands import cli as commands_cli
 from src.config import get_logger
-from src.config.methodology import Methodology, load_methodology
+from src.config.methodology import Methodology, format_methodology, load_methodology
 from src.config.settings import AgentsConfig, Settings, create_provider
+from src.providers.base import LLMProvider
 from src.storage.filesystem import FilesystemStorage
 from src.tracing import implements
 
@@ -108,7 +109,7 @@ def _ensure_sources_ingested(
                     id=f"SRC-{next_id:03d}",
                     title=title,
                     content=content,
-                    status=ElementStatus.DRAFT,
+                    status=ElementStatus.CONFIRMED,
                     provenance=Provenance(source=f.name),
                 )
                 storage.write_element(el)
@@ -121,6 +122,126 @@ def _ensure_sources_ingested(
     return 0
 
 
+def _validate_before_run(storage, methodology: Methodology, project_path: Path) -> None:
+    """Validate all elements before running agent generation.
+
+    Runs the same validator as 'spec-editor validate' but in strict mode
+    (no auto-fix). If errors are found, prints them and aborts the run.
+    """
+    from src.mcp.validator import validate
+
+    console.print()
+    console.print("[bold]Pre-run validation[/bold]")
+
+    # ── Structural validation ──
+    report = validate(storage, methodology, fix=False)
+
+    if report.errors:
+        console.print()
+        console.print(f"[red]Found {len(report.errors)} validation error(s):[/red]")
+        for err in report.errors:
+            loc = f"{err.element_id}:{err.field}" if err.element_id else "-"
+            console.print(f"  [red]✗[/red] [{loc}] {err.message}")
+        console.print()
+        console.print(
+            "[red bold]Cannot proceed with generation.[/red bold] "
+            "Fix the errors above, then re-run."
+        )
+        raise SystemExit(1)
+
+    if report.warnings:
+        console.print(f"  [yellow]OK with {len(report.warnings)} warning(s)[/yellow]")
+    else:
+        console.print(f"  [green]OK — {len(storage.list_all())} elements valid[/green]")
+
+    console.print()
+
+
+# ── License check ───────────────────────────────────────────────────
+
+# Modes that require a Pro license
+_PRO_LICENSE_MODES = frozenset({"cycle", "cycle-graph", "coding", "team"})
+
+
+def _check_license(mode: str, project_path: Path, settings) -> None:
+    """Verify license before running Pro/Cloud features.
+
+    Free (spec) mode always passes. Pro modes require a valid license.
+    Cloud proxy users additionally need cloud token balance.
+
+    On failure, prints a helpful message with purchase links and exits.
+    """
+    if mode not in _PRO_LICENSE_MODES:
+        return  # Free mode — no license needed
+
+    license_cfg = settings.license
+    if license_cfg.backend == "noop" or not license_cfg.key:
+        console.print()
+        console.print(
+            "[red bold]Pro license required[/red bold]\n"
+            f"\n  Mode '{mode}' requires a Spec Editor Pro license.\n"
+            "\n  [dim]Get a license:[/dim] [cyan]https://gumroad.com/l/spec-editor-pro[/cyan]"
+            "\n  [dim]Then activate:[/dim] [cyan]spec-editor license activate <key>[/cyan]\n"
+        )
+        raise SystemExit(1)
+
+    # Async validation
+    import asyncio
+
+    try:
+        from src.licensing import create_license_provider
+
+        provider = create_license_provider(project_path, settings)
+        status = asyncio.run(provider.validate_key(license_cfg.key, product="pro"))
+
+        if not status.valid:
+            console.print()
+            console.print(
+                f"[red bold]License invalid[/red bold]\n"
+                f"\n  {status.message}"
+                f"\n  [dim]Get a license:[/dim] [cyan]https://gumroad.com/l/spec-editor-pro[/cyan]\n"
+            )
+            raise SystemExit(1)
+
+        console.print(
+            f"[green]✓[/green] Pro license valid"
+            + (f" ({status.email})" if status.email else "")
+        )
+
+        # Cloud token check if using cloud proxy
+        if license_cfg.cloud_proxy_url and license_cfg.cloud_token_key:
+            try:
+                balance = asyncio.run(
+                    provider.get_cloud_balance(license_cfg.cloud_token_key)
+                )
+                if balance >= 0:
+                    if balance < 100000:
+                        console.print(
+                            f"[yellow]⚠[/yellow] Cloud token balance low: {balance:,} tokens"
+                        )
+                    else:
+                        console.print(
+                            f"[dim]Cloud token balance: {balance:,} tokens[/dim]"
+                        )
+            except Exception:
+                pass  # Balance check is advisory — don't block on failure
+
+    except ImportError:
+        # Licensing module not installed (shouldn't happen, but fail-safe)
+        console.print(
+            "[yellow]Warning:[/yellow] Licensing module unavailable. "
+            "Pro features may not work correctly."
+        )
+    except SystemExit:
+        raise
+    except Exception as exc:
+        console.print(f"[red]License check failed:[/red] {exc}")
+        console.print(
+            "[dim]Continuing without license validation. "
+            "Some features may be restricted.[/dim]"
+        )
+
+
 @cli.command()
 @click.option(
     "--path", "-p", default=".", type=click.Path(exists=True), help="Project path"
@@ -129,9 +250,20 @@ def _ensure_sources_ingested(
 @click.option("--task", "-t", default=None, help="Task for agents")
 @click.option("--verbose", "-v", is_flag=True, help="Verbose log (tool_calls, debug)")
 @click.option(
+    "--resume",
+    is_flag=True,
+    help="Resume from last checkpoint instead of starting fresh",
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     help="Run agents without writing to the real project",
+)
+@click.option(
+    "--dry-run-incremental",
+    "dry_run_incremental",
+    is_flag=True,
+    help="Preserve previous dry-run output (skip cleanup)",
 )
 @click.option(
     "--output-dir",
@@ -139,16 +271,96 @@ def _ensure_sources_ingested(
     type=click.Path(),
     help="Directory for dry-run output (default: <project>/.dry_run)",
 )
+@click.option(
+    "--ci",
+    default=None,
+    type=float,
+    help="Minimum connectivity index required to proceed (0.0–∞, e.g. 0.9)",
+)
+@click.option(
+    "--mode",
+    default="spec",
+    type=click.Choice(["spec", "cycle", "cycle-graph", "coding", "team"]),
+    help="Run mode: spec, cycle, cycle-graph, coding, team (all agents)",
+)
+@click.option(
+    "--coding-provider",
+    default="opencode",
+    type=click.Choice(["opencode"]),
+    help="Coding agent provider for cycle-graph mode",
+)
+@click.option(
+    "--watch",
+    "watch_mode",
+    is_flag=True,
+    help="Continuous watch mode (cycle-graph only)",
+)
 def run(
     path: str,
     max_rounds: int | None,
     task: str | None,
     verbose: bool,
+    resume: bool,
     dry_run: bool,
+    dry_run_incremental: bool,
     output_dir: str | None,
+    ci: float | None,
+    mode: str,
+    coding_provider: str,
+    watch_mode: bool = False,
 ) -> None:
     """Launch an agent dialogue to refine requirements."""
+    import atexit
+    import os
+
     project_path = Path(path).resolve()
+    lock_file = project_path / ".spec-editor-running"
+
+    # ── Check for existing running process ──
+    if lock_file.exists():
+        try:
+            old_pid = int(lock_file.read_text().strip())
+        except (ValueError, OSError):
+            old_pid = 0
+
+        from src.utils import is_process_running
+        if old_pid and is_process_running(old_pid):
+            console.print(
+                f"[red]Error:[/red] Another spec-editor is already running "
+                f"(PID {old_pid}).\n"
+                f"  Stop it first: [cyan]spec-editor shutdown[/cyan]\n"
+                f"  Or remove lock manually: [cyan]rm {lock_file}[/cyan]"
+            )
+            raise SystemExit(1)
+        else:
+            # Stale lock from a crashed/killed process — clean it up
+            console.print(
+                f"[dim]Removing stale lock file (PID {old_pid} is dead)[/dim]"
+            )
+            lock_file.unlink(missing_ok=True)
+
+    # ── Log file for this run ──
+    run_log_file = project_path / ".spec-editor-run.log"
+    import sys
+
+    class _TeeWriter:
+        """Write to both stdout and log file."""
+
+        def __init__(self, original, log_path):
+            self._orig = original
+            self._log = open(log_path, "a", encoding="utf-8", buffering=1)
+
+        def write(self, data):
+            self._orig.write(data)
+            self._log.write(data)
+
+        def flush(self):
+            self._orig.flush()
+            self._log.flush()
+
+    sys.stdout = _TeeWriter(sys.stdout, run_log_file)
+    sys.stderr = _TeeWriter(sys.stderr, run_log_file)
+
     method_path = project_path / "methodology.yaml"
     agents_path = project_path / "agents.yaml"
 
@@ -202,28 +414,75 @@ def run(
     if max_rounds:
         agents_config.max_rounds = max_rounds
 
+    # ── License check for Pro/Cloud modes ──
+    _check_license(mode, project_path, settings)
+
     # ── Create storage ──
-    if dry_run:
+    if dry_run or dry_run_incremental:
         dry_output = Path(output_dir) if output_dir else project_path / ".dry_run"
+        # Clean previous dry-run output unless incremental mode
+        if not dry_run_incremental and dry_output.exists():
+            import shutil
+            shutil.rmtree(dry_output)
+            console.print("[dim]Cleaned previous dry-run output[/dim]")
         dry_output.mkdir(parents=True, exist_ok=True)
         from src.storage.dry_run import DryRunStorage
 
         storage = DryRunStorage(project_path, dry_output)
         console.print(f"[yellow]Dry-run mode:[/yellow] writing to {dry_output}")
+        if dry_run_incremental:
+            console.print("[dim]Incremental: preserving previous dry-run elements[/dim]")
     else:
         storage = FilesystemStorage(project_path)
 
     # ── Auto-ingestion: ensure sources aspect has SRC elements ──
     _ensure_sources_ingested(project_path, storage, method, agents_config)
 
+    # ── Ensure Redis is available before non-core run modes and agent startup ──
+    if mode in ("cycle", "cycle-graph", "coding"):
+        try:
+            from src.agents.events import ensure_redis_available
+
+            ensure_redis_available(project_path)
+        except Exception as exc:
+            console.print(f"[red]Error:[/red] {exc}")
+            raise SystemExit(1)
+
+    # ── Plugin on_run hook for non-core modes (cycle, cycle-graph, coding) ──
+    try:
+        from src.hooks import get_plugins
+
+        for _p in get_plugins():
+            try:
+                if _p.on_run(
+                    mode,
+                    project_path,
+                    storage,
+                    method,
+                    agents_config,
+                    settings,
+                    task or "",
+                ):
+                    # Plugin handled the run — core does not proceed.
+                    return
+            except Exception as exc:
+                console.print(f"[yellow]Warning:[/yellow] plugin on_run failed: {exc}")
+    except ImportError:
+        pass
+
+    # ── Core mode: spec only ──
+
+    # ── Pre-run validation: check all elements before agent generation ──
+    _validate_before_run(storage, method, project_path)
+
     # ── Detect language from source documents ──
     detected_lang = _auto_detect_language(project_path, settings)
 
     # Reload methodology in detected language for agents
     if detected_lang == "ru":
-        from importlib import resources
+        from src.config._data_path import data_path
 
-        ru_path = resources.files("data") / "methodologies" / "waterfall-ru.yaml"
+        ru_path = data_path("methodologies") / "waterfall-ru.yaml"
         if ru_path.exists():
             method = load_methodology(ru_path)
             console.print("[dim]Using Russian methodology (waterfall-ru.yaml)[/dim]")
@@ -363,8 +622,130 @@ def run(
         token_budget=settings.token_budget,
     )
 
+    # Choose agent implementation: "loop" (current) or "langgraph" (experimental)
+    agent_impl = settings.agent_implementation
+
+    if agent_impl == "langgraph":
+        from src.agents.langgraph_agent import LangGraphAgent
+        from src.agents.tools import build_all_handlers, get_tool_definitions
+
+        def _make_lg_agent(name: str, role: AgentRole) -> LangGraphAgent:
+            tools = get_tool_definitions(writable=role.writable)
+            if role._allowed_tools:
+                tools = [t for t in tools if t.name in role._allowed_tools]
+            handlers = build_all_handlers(
+                storage, method, str(project_path / "source"), ci_threshold=ci or 0.7
+            )
+            prompt = (
+                role.prompt.format(methodology_description=format_methodology(method))
+                if role.prompt
+                else ""
+            )
+            return LangGraphAgent(
+                name=name,
+                provider=create_provider(agents_config.agent_1),
+                system_prompt=prompt,
+                tools=tools,
+                tool_handlers=handlers,
+                max_llm_calls=settings.max_llm_calls,
+                token_budget=settings.token_budget,
+            )
+
+    if agent_impl == "langgraph":
+        # Core spec mode — Agent 1 creates, Agent 2 links.
+        # (Non-core modes: cycle, coding, cycle-graph — handled by plugin on_run hook above.)
+
+        from src.agents.supervisor_graph import SupervisorGraph
+        from src.agents.tools import build_all_handlers, get_tool_definitions
+
+        # Agent 1: spec agent (creator)
+        role1 = AgentRole.spec_agent("Agent 1")
+
+        tools1 = get_tool_definitions(writable=role1.writable)
+        if role1._allowed_tools:
+            tools1 = [t for t in tools1 if t.name in role1._allowed_tools]
+        handlers1 = build_all_handlers(
+            storage, method, str(project_path / "source"), ci_threshold=ci or 0.7
+        )
+        prompt1 = (
+            role1.prompt.format(methodology_description=format_methodology(method))
+            if role1.prompt
+            else ""
+        )
+
+        # Agent 2: linker
+        role2 = AgentRole.cross_aspect_agent("Agent 2")
+        tools2 = get_tool_definitions(writable=role2.writable)
+        if role2._allowed_tools:
+            tools2 = [t for t in tools2 if t.name in role2._allowed_tools]
+        # Remove read_source_document — linker only reads specification elements
+        tools2 = [t for t in tools2 if t.name != "read_source_document"]
+        handlers2 = build_all_handlers(
+            storage, method, str(project_path / "source"), ci_threshold=ci or 0.7
+        )
+        # Remove read_source_document handler
+        handlers2.pop("read_source_document", None)
+        prompt2 = (
+            role2.prompt.format(methodology_description=format_methodology(method))
+            if role2.prompt
+            else ""
+        )
+
+        def _provider_factory(agent_name: str) -> LLMProvider:
+            if agent_name == "agent_1":
+                return create_provider(agents_config.agent_1)
+            return create_provider(agents_config.agent_2)
+
+        graph = SupervisorGraph(
+            storage=storage,
+            config=agents_config,
+            provider_factory=_provider_factory,
+            agent1_prompt=prompt1,
+            agent2_prompt=prompt2,
+            agent1_tools=tools1,
+            agent2_tools=tools2,
+            agent1_handlers=handlers1,
+            agent2_handlers=handlers2,
+            max_llm_calls=settings.max_llm_calls,
+            log_dir=project_path,
+            project_path=project_path,
+            source_dir=str(project_path / "source"),
+            ci_threshold=ci,
+        )
+
+        console.print("[bold]Starting multi-agent team (LangGraph supervisor)[/bold]")
+        console.print(f"  Agent 1 (creator): {agents_config.agent_1.model}")
+        console.print(f"  Agent 2 (linker): {agents_config.agent_2.model}")
+        if resume:
+            console.print(
+                "  Mode: [cyan]RESUME[/cyan] — continuing from last checkpoint"
+            )
+        console.print()
+
+        # Create lock file so VSCode can track run status
+        lock_file.write_text(str(os.getpid()))
+
+        result = asyncio.run(graph.run(initial_task, resume=resume))
+
+        m = result.get("last_metrics", {})
+        console.print()
+        console.print(f"[bold]Team finished: {result.get('status', 'unknown')}[/bold]")
+        console.print(
+            f"  Elements: {m.get('total_elements', '?')}, Relationships: {m.get('total_relationships', '?')}"
+        )
+        console.print(
+            f"  Connectivity: {m.get('connectivity_index', '?')}, Orphans: {m.get('orphan_elements', '?')}"
+        )
+        console.print(
+            f"  Cost: ${result.get('agent1_cost', 0) + result.get('agent2_cost', 0):.4f}"
+        )
+
+        lock_file.unlink(missing_ok=True)
+        return  # Exit early — LangGraph path done
+
+    # ── Loop agent path (original DialogueManager) ──
     agent_1 = factory.create(AgentRole.spec_agent("Agent 1"))
-    agent_2 = factory.create(AgentRole.spec_agent("Agent 2"))
+    agent_2 = factory.create(AgentRole.cross_aspect_agent("Agent 2"))
     orchestrator = SpecAgent(
         name="orchestrator",
         provider=create_provider(agents_config.orchestrator),
@@ -391,6 +772,17 @@ def run(
     console.print()
     console.print("[dim]Agents are starting specification analysis...[/dim]")
 
+    # Create lock file NOW — after all init succeeded, before the long run
+    def _cleanup_lock():
+        lock_file.unlink(missing_ok=True)
+
+    atexit.register(_cleanup_lock)
+
+    from src.utils import set_signal_handlers
+    set_signal_handlers(on_shutdown=lambda *_: (_cleanup_lock(), os._exit(0)))
+
+    lock_file.write_text(str(os.getpid()))
+
     async def _run():
         return await dialogue.run(
             initial_task=initial_task,
@@ -399,6 +791,9 @@ def run(
         )
 
     result = asyncio.run(_run())
+
+    # Remove lock file on successful completion
+    lock_file.unlink(missing_ok=True)
 
     console.print()
     console.print(f"[bold]Dialogue finished: {result.status}[/bold]")
@@ -495,3 +890,7 @@ def _on_orchestrator(decision: OrchestratorDecision, reason: str):
             border_style=color,
         )
     )
+
+
+if __name__ == "__main__":
+    cli()

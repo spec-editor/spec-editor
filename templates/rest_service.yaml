@@ -1,0 +1,77 @@
+# Python REST API backend (FastAPI / Flask / Django REST)
+# Architecture: DDD + Hexagonal (Ports & Adapters)
+#
+# Detection: pyproject.toml or requirements.txt + src/ directory
+# with FastAPI/Flask/Django dependency.
+
+name: rest_service
+platform: python
+runtime: python >= 3.11
+description: >
+  Python REST API backend using FastAPI (default), Flask, or Django REST.
+  Domain-Driven Design with hexagonal (ports & adapters) structure.
+
+detection:
+  files:
+    - pyproject.toml
+    - requirements.txt
+    - setup.py
+    - setup.cfg
+  any_of: true
+  frameworks:
+    - fastapi
+    - flask
+    - django
+    - litestar
+  dirs:
+    - src
+
+init:
+  - command: python3 -m venv .venv
+    description: Create virtual environment
+  - command: .venv/bin/pip install --upgrade pip
+    description: Upgrade pip
+  - command: .venv/bin/pip install -r requirements.txt
+    description: Install dependencies
+    condition:
+      file: requirements.txt
+  - command: .venv/bin/pip install -e ".[dev]"
+    description: Install in development mode
+    condition:
+      file: pyproject.toml
+
+test:
+  - command: .venv/bin/python -m pytest tests/ -q --tb=short --no-header
+    description: Run pytest
+  - command: .venv/bin/python -m pytest tests/ --cov=src --cov-report=term
+    description: Run with coverage
+    optional: true
+  - command: .venv/bin/ruff check src/
+    description: Lint with ruff
+    optional: true
+
+build:
+  - command: .venv/bin/pip install -r requirements.txt
+    description: Install production dependencies
+  - command: docker build -t {{project_slug}}:latest .
+    description: Build Docker image
+    optional: true
+
+deploy:
+  - command: docker push {{registry}}/{{project_slug}}:latest
+    description: Push Docker image
+    optional: true
+  - command: docker compose -f docker-compose.yml up -d
+    description: Deploy with Docker Compose
+    optional: true
+    condition:
+      file: docker-compose.yml
+
+services:
+  - postgres
+  - redis
+  optional: true
+
+artifacts:
+  - Docker image
+  - Python wheel (optional)

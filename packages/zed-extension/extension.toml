@@ -1,0 +1,14 @@
+id = "spec-editor"
+name = "Spec Editor"
+version = "0.1.0"
+schema_version = 1
+authors = ["Spec Editor Team"]
+description = "AI-powered requirements engineering with structured specs. Connects to spec-editor MCP server for spec browsing, diagram generation, and git history."
+repository = "https://github.com/zed-industries/spec-editor"
+
+[slash_commands]
+spec = "Browse and search specification elements"
+spec-diagram = "Generate Mermaid diagrams by aspect"
+spec-validate = "Validate specification integrity"
+spec-search = "Full-text search across elements and code"
+spec-context = "Load requirements context for a code file"

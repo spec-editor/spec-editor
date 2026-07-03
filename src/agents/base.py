@@ -24,9 +24,9 @@ def _format_tool_names(tool_calls: list[ToolCall]) -> list[str]:
     for tc in tool_calls:
         name = tc.name
         args = tc.arguments or {}
-        if name == "read_source":
+        if name == "read_source_document":
             fname = args.get("filename", "")
-            result.append(f"read_source({fname})" if fname else "read_source")
+            result.append(f"read_raw({fname})" if fname else "read_raw")
         elif name == "read_element":
             eid = args.get("element_id", "")
             result.append(f"read_element({eid})" if eid else "read_element")
@@ -113,9 +113,7 @@ class BaseAgent:
                 Message(role=MessageRole.SYSTEM, content=self._system_prompt)
             )
             if trace_callback:
-                trace_callback(
-                    f"[{self.name}] SYSTEM PROMPT:\n{self._system_prompt}"
-                )
+                trace_callback(f"[{self.name}] SYSTEM PROMPT:\n{self._system_prompt}")
         else:
             has_system = any(m.role == MessageRole.SYSTEM for m in conversation_history)
             if not has_system:
@@ -124,7 +122,11 @@ class BaseAgent:
                 )
 
             for msg in conversation_history:
-                if msg.tool_calls:
+                if msg.role == MessageRole.TOOL:
+                    # Skip tool results — too many tokens. Progress is summarized
+                    # in the prompt via _format_tool_summary in dialogue_manager.
+                    continue
+                elif msg.tool_calls:
                     messages.append(
                         Message(
                             role=msg.role,
@@ -265,6 +267,14 @@ class BaseAgent:
             )
             msg = f"[{self.name}] call #{_total_calls} ({total_all} tok, ~${cost:.4f}{cper}{ctotal}): {display}"
             print(msg, flush=True)
+
+            # Show agent's reasoning text (what it plans to do and why)
+            if response.content and response.content.strip():
+                text = response.content.strip()[:300]
+                print(f"[{self.name}]   💬 {text}", flush=True)
+                if trace_callback:
+                    trace_callback(f"[{self.name}]   💬 {text}")
+
             if trace_callback:
                 trace_callback(msg)
 
@@ -374,7 +384,9 @@ class BaseAgent:
                     )
 
             # Record in summary
-            self._compactor.record_tool_call(tc.name, tc.arguments)
+            self._compactor.record_tool_call(
+                tc.name, tc.arguments, result if isinstance(result, dict) else None
+            )
 
             tool_messages.append(
                 Message(

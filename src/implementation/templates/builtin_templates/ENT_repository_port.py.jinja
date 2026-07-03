@@ -1,0 +1,50 @@
+{#-
+  Hexagonal Architecture — Repository Port template.
+  
+  Variables:
+    element:      the spec Element object
+    pattern_name: "hexagonal"
+    naming:       dict of element_type_prefix → file pattern
+
+  Generates a repository interface (port) in src/ports/
+-#}
+"""{{ element.title }} — repository port (interface).
+
+Auto-generated from spec element {{ element.id }}.
+Pattern: {{ pattern_name }} | Layer: ports
+
+Defines the data access contract. Adapters implement this interface.
+"""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from typing import Any
+
+
+class {{ element.title | replace(' ', '') | replace('-', '_') }}Repository(ABC):
+    """Repository port for {{ element.title }}.
+
+    Implementations (adapters) provide concrete storage backends
+    (Postgres, in-memory, file-based, etc.).
+    """
+
+    @abstractmethod
+    async def get(self, id: str) -> dict[str, Any] | None:
+        """Retrieve an entity by ID."""
+        ...
+
+    @abstractmethod
+    async def save(self, entity: dict[str, Any]) -> str:
+        """Persist an entity. Returns the entity ID."""
+        ...
+
+    @abstractmethod
+    async def delete(self, id: str) -> bool:
+        """Remove an entity by ID. Returns True if deleted."""
+        ...
+
+    @abstractmethod
+    async def list(self, *, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+        """List entities with pagination."""
+        ...

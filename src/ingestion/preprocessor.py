@@ -50,11 +50,14 @@ class ProcessedFile:
 
 _CLASSIFY_PROMPT = """\
 You are a software system requirements analyser.
-Read the text and answer: is this a system requirement?
+Read the text and answer: does this contain ANY useful information
+about a software system that should be captured in a specification?
 
 ANSWER ONLY one of:
-- YES — this is a requirement (feature, request, constraint)
-- NO — this is not a requirement (spam, greetings, off-topic)
+- YES — this contains requirements, ideas, concepts, user stories,
+  architecture descriptions, constraints, or design decisions
+  about a software system
+- NO — this is irrelevant (spam, greetings, off-topic, empty)
 
 If YES — you can add confidence in parentheses: YES (confidence: 0.9)
 
@@ -88,7 +91,8 @@ class RequirementClassifier:
 
     _BATCH_PROMPT = """\
 You are a requirements analyser. Below is a list of messages (each with ID).
-For each, answer YES (if requirement/feature/request) or NO (spam/flood).
+For each, answer YES (if it contains requirements, ideas, concepts, or
+design decisions about a software system) or NO (spam/irrelevant).
 
 Return a JSON object: {{"ID": "YES", ...}}
 ONLY JSON, no explanation.
@@ -349,11 +353,67 @@ class SourcePreprocessor:
         except Exception:
             return file_path.read_text(encoding="utf-8", errors="replace")
 
+    @staticmethod
+    def _is_text_file(fp: Path) -> bool:
+        """Check if a file contains readable text (not binary garbage)."""
+        # Skip empty files
+        if fp.stat().st_size == 0:
+            return False
+        # Skip binary extensions
+        binary_exts = {
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".bmp",
+            ".webp",
+            ".ico",
+            ".pdf",
+            ".doc",
+            ".docx",
+            ".xls",
+            ".xlsx",
+            ".ppt",
+            ".pptx",
+            ".zip",
+            ".tar",
+            ".gz",
+            ".bz2",
+            ".7z",
+            ".rar",
+            ".mp3",
+            ".mp4",
+            ".wav",
+            ".avi",
+            ".mov",
+            ".mkv",
+            ".exe",
+            ".dll",
+            ".so",
+            ".dylib",
+            ".bin",
+            ".dat",
+            ".ttf",
+            ".otf",
+            ".woff",
+            ".woff2",
+        }
+        if fp.suffix.lower() in binary_exts:
+            return False
+        # Try to read as UTF-8 — if it fails with decode error, it's binary
+        try:
+            fp.read_text(encoding="utf-8")
+            return True
+        except UnicodeDecodeError:
+            return False
+
     @implements("SRC-011")
     def process(self) -> list[ProcessedFile]:
         """Process all unread files in sources_raw/.
 
         Groups messages by day, classifies in batches.
+        Pre-filters binary/empty files as true spam.
+        Text files are always kept — even if not classified as requirements.
         """
         results: list[ProcessedFile] = []
         source_files = sorted(
@@ -367,12 +427,34 @@ class SourcePreprocessor:
         if not source_files:
             return results
 
+        # ── Pre-filter: binary/empty files → true spam ──
+        text_files: list[Path] = []
+        req_count = 0
+        spam_count = 0
+        non_req_count = 0
+
+        for fp in source_files:
+            if self._is_text_file(fp):
+                text_files.append(fp)
+            else:
+                spam_path = self._raw_dir / f"_spam_{fp.name}"
+                fp.rename(spam_path)
+                spam_count += 1
+                results.append(ProcessedFile(source_file=fp.name, is_spam=True))
+
+        if not text_files:
+            print(
+                f"\nTotal: {req_count} requirements, {spam_count} spam, "
+                f"{non_req_count} non-requirements from {len(source_files)}"
+            )
+            return results
+
         # Group by day (from timestamp in filename)
         import re
         from collections import defaultdict
 
         days: dict[str, list[Path]] = defaultdict(list)
-        for fp in source_files:
+        for fp in text_files:
             ts_match = re.search(r"_(\d{10})_", fp.name)
             if ts_match:
                 from datetime import datetime, timezone
@@ -384,9 +466,6 @@ class SourcePreprocessor:
             days[day].append(fp)
 
         # Process each day
-        req_count = 0
-        spam_count = 0
-
         for day, files in sorted(days.items()):
             print(f"  Day {day}: {len(files)} messages", flush=True)
 
@@ -404,6 +483,8 @@ class SourcePreprocessor:
                 all_class.update(classifications)
 
             # Process results
+            day_spam = 0
+            day_nonreq = 0
             for fp in files:
                 name = fp.name
                 cls_result = all_class.get(name)
@@ -411,10 +492,10 @@ class SourcePreprocessor:
                     continue
 
                 if not cls_result.is_requirement:
-                    spam_path = self._raw_dir / f"_spam_{name}"
-                    fp.rename(spam_path)
-                    spam_count += 1
-                    results.append(ProcessedFile(source_file=name, is_spam=True))
+                    # Text file that is not a requirement — KEEP IT, just note
+                    non_req_count += 1
+                    day_nonreq += 1
+                    results.append(ProcessedFile(source_file=name, is_spam=False))
                     continue
 
                 # Extract facts — use FULL text
@@ -447,9 +528,13 @@ class SourcePreprocessor:
                 )
                 results.append(ProcessedFile(source_file=name, fact=fact))
 
-            print(f"    → {len(files) - spam_count} requirements, {spam_count} spam")
+            print(
+                f"    → {len(files) - day_spam - day_nonreq} requirements, "
+                f"{day_nonreq} non-requirements, {day_spam} spam"
+            )
 
         print(
-            f"\nTotal: {req_count} requirements, {spam_count} spam from {len(source_files)}"
+            f"\nTotal: {req_count} requirements, {spam_count} spam, "
+            f"{non_req_count} non-requirements from {len(source_files)}"
         )
         return results

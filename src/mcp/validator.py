@@ -11,6 +11,7 @@ from src.config.methodology import (
 )
 from src.storage.adapter import StorageAdapter
 from src.storage.models import Element
+from src.storage.queries import load_all_elements
 
 logger = get_logger(__name__)
 
@@ -42,29 +43,63 @@ class ValidationReport(BaseModel):
         )
 
 
+def _find_parent_cycle(
+    element_id: str, parent_id: str | None, elements: list[Element]
+) -> str | None:
+    """Check if setting element_id.parent = parent_id would create a cycle.
+
+    Walks upward from parent_id through parents. Returns error message
+    if element_id is found in ancestor chain (cycle), else None.
+    elements: list of all elements (used as lookup by ID).
+    """
+    if not parent_id:
+        return None
+    if parent_id == element_id:
+        return f"Cannot set parent to self: '{element_id}' → '{parent_id}'"
+
+    # Build ID→Element lookup
+    lookup: dict[str, Element] = {e.id: e for e in elements}
+
+    visited = {element_id}
+    current = parent_id
+    while current:
+        if current in visited:
+            chain = " → ".join(visited | {current})
+            return f"Parent cycle detected: {chain}"
+        visited.add(current)
+        parent_el = lookup.get(current)
+        if parent_el is None:
+            break  # parent not in elements — no cycle possible
+        current = parent_el.parent
+    return None
+
+
 def validate(
     storage: StorageAdapter, methodology: Methodology, fix: bool = True
 ) -> ValidationReport:
     """Validate the specification. When fix=True, automatically fixes broken links."""
 
     report = ValidationReport()
-    all_elements: list[Element] = []
     all_ids: set[str] = set()
     duplicate_ids: set[str] = set()
 
-    for summary in storage.list_all():
-        try:
-            element = storage.read_element(summary.id)
-            all_elements.append(element)
-            if element.id in all_ids:
-                duplicate_ids.add(element.id)
-            else:
-                all_ids.add(element.id)
-        except Exception as exc:
-            report.add_error(summary.id, None, f"Failed to read: {exc}")
+    all_elements = load_all_elements(storage)
+    for element in all_elements:
+        if element.id in all_ids:
+            duplicate_ids.add(element.id)
+        else:
+            all_ids.add(element.id)
 
     for dup_id in duplicate_ids:
         report.add_error(dup_id, "id", "Duplicate ID")
+
+    # Cycle detection: check parent chains
+    for element in all_elements:
+        if element.id in duplicate_ids:
+            continue
+        cycle_msg = _find_parent_cycle(element.id, element.parent, all_elements)
+        if cycle_msg:
+            report.add_error(element.id, "parent", cycle_msg)
 
     for element in all_elements:
         if element.id in duplicate_ids:

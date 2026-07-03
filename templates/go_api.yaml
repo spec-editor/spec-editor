@@ -1,0 +1,58 @@
+# Go REST API / microservice
+#
+# Detection: go.mod with common HTTP framework or stdlib net/http.
+
+name: go_api
+platform: go
+runtime: go >= 1.21
+description: >
+  Go REST API or microservice. Standard library net/http with
+  gorilla/mux, chi, gin, or echo router. Compiled to single binary.
+
+detection:
+  files:
+    - go.mod
+    - go.sum
+  any_of_files: false
+  requires:
+    - go.mod
+  frameworks:
+    - gin-gonic/gin
+    - gorilla/mux
+    - go-chi/chi
+    - labstack/echo
+    - gorilla/websocket
+
+init:
+  - command: go mod download
+    description: Download dependencies
+  - command: cp .env.example .env
+    description: Copy environment template
+    optional: true
+
+test:
+  - command: go test ./... -v -race
+    description: Run tests with race detector
+  - command: go vet ./...
+    description: Static analysis
+
+build:
+  - command: CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/{{project_slug}} ./cmd/...
+    description: Build static binary
+
+deploy:
+  - command: docker build -t {{project_slug}}:latest . && docker push {{registry}}/{{project_slug}}:latest
+    description: Docker build and push
+    optional: true
+  - command: scp bin/{{project_slug}} {{deploy_host}}:{{deploy_path}}/
+    description: Deploy binary via SCP
+    optional: true
+
+services:
+  - postgres
+  - redis
+  optional: true
+
+artifacts:
+  - Single statically-linked binary (~10-15 MB)
+  - Docker image (scratch base, ~5 MB)

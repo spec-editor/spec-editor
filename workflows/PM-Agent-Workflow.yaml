@@ -1,0 +1,77 @@
+# PM Agent Workflow — unified spec→code→debug loop.
+#
+# Single workflow for both uncoded spec elements and bug fixes.
+# All reviewed elements dispatched via Redis to coding workers.
+# Targeted tests use @implements decorators on test files.
+
+workflow:
+  name: cycle_loop
+  version: "12.0"
+  description: >
+    Unified loop: health → generate code for reviewed specs → fix bugs
+    → run targeted tests → accept → deploy → recheck → escalate.
+
+  state:
+    logs_path: "logs/"
+
+  steps:
+    # ── Scan for issues ──
+    - id: health_check
+      tool: health_check
+      description: "Check frontend, logs → create SRC-BUG-* (DRAFT)"
+
+    # ── Generate code for all reviewed spec elements (uncoded first, then bugs) ──
+    - id: generate_code
+      tool: generate_all_code
+      params:
+        model: "deepseek/deepseek-reasoner"
+      description: "Dispatch all reviewed elements to Redis coding queue (MOD*/IMP*/NFR* first, SRC-BUG-* second)"
+
+    # ── Targeted tests — only for modules with recent code changes ──
+    - id: run_tests
+      tool: terminal
+      params:
+        command: "ls tests/ >/dev/null 2>&1 && {{test_command}} || echo 'SKIP: no tests/ directory'"
+      when: "{{need_deploy}}"
+      description: "Targeted tests via @implements — skipped if no confirmed elements"
+      continue_on_failure: true
+
+    # ── Verify @implements coverage ──
+    - id: verify_implements
+      tool: verify_implements
+      params:
+        project_path: "."
+      description: "Check @implements decorators cover all leaves"
+
+    # ── Architecture compliance check ──
+    - id: verify_architecture
+      tool: verify_architecture
+      when: "{{need_deploy}}"
+      description: "Run architecture enforcement tests (auto-generated from pattern rules)"
+      continue_on_failure: true
+
+    # ── QA: semantic spec-to-code check ──
+    - id: acceptance_test
+      tool: acceptance_test
+      params:
+        max_leaves: 5
+      when: "{{need_deploy}}"
+      description: "QA: semantic spec-to-code comparison"
+
+    # ── Deploy ──
+    - id: deploy
+      tool: run_workflow
+      params:
+        workflow: "Deploy-Workflow"
+      when: "{{need_deploy}}"
+      description: "DevOps: build & deploy"
+
+    # ── Always: recover blocked bugs ──
+    - id: recheck
+      tool: recheck_blocked
+      description: "Re-check blocked bugs: run tests → recover or escalate"
+
+    # ── Always: escalate blocked → analyst refinement ──
+    - id: escalate
+      tool: escalate
+      description: "Report BLOCKED bugs → analyst for refinement"

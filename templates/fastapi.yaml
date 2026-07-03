@@ -1,0 +1,54 @@
+# Python FastAPI backend (async-first REST API)
+# Optimized for high-concurrency async endpoints.
+#
+# Detection: pyproject.toml with fastapi dependency, async handlers.
+
+name: fastapi
+platform: python
+runtime: python >= 3.11
+description: >
+  Python async REST API using FastAPI. Optimized for high-concurrency
+  endpoints with async/await, Pydantic v2 validation, and OpenAPI docs.
+
+detection:
+  files:
+    - pyproject.toml
+  frameworks:
+    - fastapi
+  has_async: true
+
+init:
+  - command: python3 -m venv .venv
+    description: Create virtual environment
+  - command: .venv/bin/pip install -e ".[dev]"
+    description: Install with dev extras
+
+test:
+  - command: .venv/bin/python -m pytest tests/ -q --tb=short
+    description: Run pytest
+  - command: .venv/bin/python -m pytest tests/ --cov=src --cov-report=term
+    description: Coverage report
+    optional: true
+
+build:
+  - command: docker build -t {{project_slug}}:latest .
+    description: Build Docker image
+
+deploy:
+  - command: docker compose -f docker-compose.yml up -d
+    description: Deploy with Docker Compose
+    optional: true
+    condition:
+      file: docker-compose.yml
+  - command: docker push {{registry}}/{{project_slug}}:latest
+    description: Push to registry
+    optional: true
+
+services:
+  - postgres
+  - redis
+  optional: true
+
+artifacts:
+  - Docker image
+  - OpenAPI spec (auto-generated at /docs)

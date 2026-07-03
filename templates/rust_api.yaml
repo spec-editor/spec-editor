@@ -1,0 +1,61 @@
+# Rust API backend — Actix Web / Axum
+#
+# Detection: Cargo.toml with actix-web or axum dependency.
+
+name: rust_api
+platform: rust
+runtime: rust >= 1.75
+description: >
+  Rust REST API using Actix Web or Axum. High-performance, memory-safe
+  backend with async runtime (tokio). SQLx or Diesel for database access.
+
+detection:
+  files:
+    - Cargo.toml
+    - Cargo.lock
+  any_of: false
+  requires:
+    - Cargo.toml
+  frameworks:
+    - actix-web
+    - axum
+    - warp
+    - rocket
+
+init:
+  - command: cargo fetch
+    description: Fetch dependencies
+  - command: cp .env.example .env
+    description: Copy environment template
+    optional: true
+
+test:
+  - command: cargo test --release
+    description: Run tests (release profile)
+  - command: cargo clippy -- -D warnings
+    description: Lint with Clippy
+    optional: true
+  - command: cargo fmt -- --check
+    description: Check formatting
+    optional: true
+
+build:
+  - command: cargo build --release
+    description: Build release binary
+
+deploy:
+  - command: docker build -t {{project_slug}}:latest . && docker push {{registry}}/{{project_slug}}:latest
+    description: Docker build and push
+    optional: true
+  - command: scp target/release/{{project_slug}} {{deploy_host}}:{{deploy_path}}/
+    description: Deploy binary via SCP
+    optional: true
+
+services:
+  - postgres
+  - redis
+  optional: true
+
+artifacts:
+  - Single statically-linked binary (target/release/)
+  - Docker image (scratch or alpine base)

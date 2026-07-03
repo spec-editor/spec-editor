@@ -1,0 +1,47 @@
+# Python CLI tool (Click / Typer / argparse)
+# Single entry point, installable via pipx or pip.
+#
+# Detection: pyproject.toml with [project.scripts] entry point.
+
+name: cli_tool
+platform: python
+runtime: python >= 3.11
+description: >
+  Python command-line tool. Single executable entry point, installable
+  via pip or pipx. Uses Click, Typer, or argparse.
+
+detection:
+  files:
+    - pyproject.toml
+    - setup.py
+  any_of: true
+  has_entry_points: true
+  frameworks:
+    - click
+    - typer
+
+init:
+  - command: python3 -m venv .venv
+    description: Create virtual environment
+  - command: .venv/bin/pip install -e ".[dev]"
+    description: Install in development mode
+
+test:
+  - command: .venv/bin/python -m pytest tests/ -q --tb=short
+    description: Run tests
+
+build:
+  - command: .venv/bin/python -m build
+    description: Build wheel
+  - command: .venv/bin/pipx install dist/*.whl --force
+    description: Install globally via pipx
+    optional: true
+
+deploy:
+  - command: .venv/bin/twine upload dist/*
+    description: Publish to PyPI
+    optional: true
+
+artifacts:
+  - Python wheel
+  - Standalone binary (via PyInstaller, optional)

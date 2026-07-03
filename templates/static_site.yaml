@@ -1,0 +1,46 @@
+# Static HTML/CSS/JS site — no build tool
+#
+# Detection: index.html, no package.json or framework.
+
+name: static_site
+platform: static
+runtime: any
+description: >
+  Plain static website with HTML, CSS, and vanilla JavaScript.
+  No build step required. Deployed directly to any static hosting
+  (nginx, S3, GitHub Pages, Cloudflare Pages).
+
+detection:
+  files:
+    - index.html
+  not_files:
+    - package.json
+    - composer.json
+    - Cargo.toml
+    - go.mod
+
+init: []   # no dependencies to install
+
+test:
+  - command: npx htmlhint "**/*.html"
+    description: HTML validation
+    optional: true
+  - command: npx stylelint "**/*.css"
+    description: CSS lint
+    optional: true
+
+build: []   # no build step — already static
+
+deploy:
+  - command: rsync -avz ./ {{deploy_host}}:{{deploy_path}}/
+    description: Deploy via rsync
+    optional: true
+  - command: npx wrangler pages deploy ./
+    description: Deploy to Cloudflare Pages
+    optional: true
+  - command: aws s3 sync ./ s3://{{bucket}}/ --delete
+    description: Deploy to S3
+    optional: true
+
+artifacts:
+  - Static files (HTML, CSS, JS, images)

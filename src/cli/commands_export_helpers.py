@@ -52,6 +52,10 @@ def _export_srs(storage, project_path, output, template):
 
     from src.export.pipeline import pipeline_from_config
 
+    if not template:
+        from importlib import resources
+        template = str(resources.files("data") / "srs_template.yaml")
+
     template_path = Path(template) if Path(template).is_absolute() else Path(template)
 
     cfg = {
@@ -205,20 +209,13 @@ def _export_jira(storage, project_path, output):
         console.print("[yellow]No user stories found in the specification.[/yellow]")
         return
 
-    # Render CSV template
-    template_path = (
-        Path(__file__).parent.parent / "codegen" / "templates" / "jira_csv.csv.j2"
-    )
+    # Render CSV template (inline — codegen templates removed)
     env = Environment(loader=BaseLoader())
-    if template_path.exists():
-        tmpl = env.from_string(template_path.read_text(encoding="utf-8"))
-    else:
-        # Fallback inline template
-        tmpl = env.from_string(
-            "Summary,Description,Story Points,Priority,Epic Link,Acceptance Criteria,Labels,Sprint\n"
-            '{% for story in stories %}"{{ story.title }}",'
-            '"As a {{ story.as_a }}, I want {{ story.i_want }} so that {{ story.so_that }}",'
-            "{{ story.story_points }},{{ story.priority }},{{ story.epic }}",
+    tmpl = env.from_string(
+        "Summary,Description,Story Points,Priority,Epic Link,Acceptance Criteria,Labels,Sprint\n"
+        '{% for story in stories %}"{{ story.title }}",'
+        '"As a {{ story.as_a }}, I want {{ story.i_want }} so that {{ story.so_that }}",'
+        "{{ story.story_points }},{{ story.priority }},{{ story.epic }}",
             '"{% for ac in story.acceptance_criteria %}GIVEN {{ ac.given }} WHEN {{ ac.when }} THEN {{ ac.then }}. {% endfor %}",'
             '{{ story.tags | join(" ") }},{{ story.sprint }}\n'
             "{% endfor %}",

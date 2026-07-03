@@ -69,6 +69,11 @@ class ToolDef(BaseModel):
     )
 
 
+def make_tool_params(props: dict, required: list[str] | None = None) -> dict:
+    """Build JSON Schema parameters dict for ToolDef."""
+    return {"type": "object", "properties": props, "required": required or []}
+
+
 # ------------------------------------------------------------------
 # LLM response
 # ------------------------------------------------------------------

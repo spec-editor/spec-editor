@@ -1,0 +1,82 @@
+
+# 2026-06-23 15:21:51.028990
++Fix SRC-BUG-011 (attempt 2/3): Deploy-Workflow failed: run_tests: failed — FAILED tests/test_editor_adapters.py.
++
++Sub-workflow 'Deploy-Workflow' completed with errors:
++run_tests: failed — FAILED tests/test_editor_adapters.py::TestStandaloneAdapterProjects::test_get_current_project_returns_none_when_no_project
++FAILED tests/test_editor_adapters.py::TestStandaloneAdapterGit::test_git_bran
++
++PROJECT: /Users/dmitry/Documents/Droid/spec-editor2
++Read FILES TO CHECK mentioned above before making changes.
++Use bash to run: python -m pytest tests/ -q to verify fixes.
+
+# 2026-06-23 15:21:51.029162
++Fix SRC-BUG-011 (attempt 2/3): Deploy-Workflow failed: run_tests: failed — FAILED tests/test_editor_adapters.py.
++
++Sub-workflow 'Deploy-Workflow' completed with errors:
++run_tests: failed — FAILED tests/test_editor_adapters.py::TestStandaloneAdapterProjects::test_get_current_project_returns_none_when_no_project
++FAILED tests/test_editor_adapters.py::TestStandaloneAdapterGit::test_git_bran
++
++PROJECT: /Users/dmitry/Documents/Droid/spec-editor2
++Read FILES TO CHECK mentioned above before making changes.
++Use bash to run: python -m pytest tests/ -q to verify fixes.
+
+# 2026-06-23 15:22:32.687299
++Fix SRC-BUG-005 (attempt 1/3): QA: REQ-002 — The requirement REQ-002 'Localhost Binding Securit.
++
++Acceptance test gap for REQ-002: Localhost Binding Security
++
++Reason: The requirement REQ-002 'Localhost Binding Security' is not implemented at all. The provided code contains only version definitions, CLI entry point setup, and empty package init files. There is no configuration, logic, or code that restricts binding to localhost (e.g., setting host='127.0.0.1' or 'localhost'), no server startup code, no network binding configuration, and no security controls related to localhost-only access.
++
++Severity: high
++
++ACTION: Implement REQ-002 according to the spec.
++
++PROJECT: /Users/dmitry/Documents/Droid/spec-editor2
++Read FILES TO CHECK mentioned above before making changes.
++Use bash to run: python -m pytest tests/ -q to verify fixes.
+
+# 2026-06-23 15:22:32.687465
++Fix SRC-BUG-005 (attempt 1/3): QA: REQ-002 — The requirement REQ-002 'Localhost Binding Securit.
++
++Acceptance test gap for REQ-002: Localhost Binding Security
++
++Reason: The requirement REQ-002 'Localhost Binding Security' is not implemented at all. The provided code contains only version definitions, CLI entry point setup, and empty package init files. There is no configuration, logic, or code that restricts binding to localhost (e.g., setting host='127.0.0.1' or 'localhost'), no server startup code, no network binding configuration, and no security controls related to localhost-only access.
++
++Severity: high
++
++ACTION: Implement REQ-002 according to the spec.
++
++PROJECT: /Users/dmitry/Documents/Droid/spec-editor2
++Read FILES TO CHECK mentioned above before making changes.
++Use bash to run: python -m pytest tests/ -q to verify fixes.
+
+# 2026-06-23 15:23:16.241750
++Fix SRC-BUG-004 (attempt 1/3): QA: REQ-005 — The requirement REQ-005 'Dry-Run Testing Maintaina.
++
++Acceptance test gap for REQ-005: Dry-Run Testing Maintainability
++
++Reason: The requirement REQ-005 'Dry-Run Testing Maintainability' is a non-functional requirement, but the provided code only contains basic package initialization and CLI entry point logic. There is no implementation of dry-run testing functionality, no maintainability features (such as logging, configuration for dry-run mode, test coverage, or documentation), and no code that supports testing the system's maintainability. The code is essentially a skeleton with no relevant logic.
++
++Severity: high
++
++ACTION: Implement REQ-005 according to the spec.
++
++PROJECT: /Users/dmitry/Documents/Droid/spec-editor2
++Read FILES TO CHECK mentioned above before making changes.
++Use bash to run: python -m pytest tests/ -q to verify fixes.
+
+# 2026-06-23 15:23:16.242001
++Fix SRC-BUG-004 (attempt 1/3): QA: REQ-005 — The requirement REQ-005 'Dry-Run Testing Maintaina.
++
++Acceptance test gap for REQ-005: Dry-Run Testing Maintainability
++
++Reason: The requirement REQ-005 'Dry-Run Testing Maintainability' is a non-functional requirement, but the provided code only contains basic package initialization and CLI entry point logic. There is no implementation of dry-run testing functionality, no maintainability features (such as logging, configuration for dry-run mode, test coverage, or documentation), and no code that supports testing the system's maintainability. The code is essentially a skeleton with no relevant logic.
++
++Severity: high
++
++ACTION: Implement REQ-005 according to the spec.
++
++PROJECT: /Users/dmitry/Documents/Droid/spec-editor2
++Read FILES TO CHECK mentioned above before making changes.
++Use bash to run: python -m pytest tests/ -q to verify fixes.

@@ -25,6 +25,9 @@ class ContextCompactor:
         self._tool_counts: Counter[str] = Counter()
         self._aspect_counts: Counter[str] = Counter()
         self._first_plan: str = ""  # first agent "plan"
+        self._last_metrics: dict | None = None  # last run_metrics result
+        self._created_ids: list[str] = []  # IDs of created elements
+        self._linked_pairs: list[str] = []  # "SRC --rel--> TGT" strings
 
     def record_llm_call(self, prompt_tokens: int, completion_tokens: int) -> None:
         """Record one LLM call."""
@@ -37,12 +40,24 @@ class ContextCompactor:
         if not self._first_plan and text:
             self._first_plan = text[:300]
 
-    def record_tool_call(self, tool_name: str, arguments: dict | None = None) -> None:
+    def record_tool_call(
+        self, tool_name: str, arguments: dict | None = None, result: dict | None = None
+    ) -> None:
         """Record a tool call for statistics."""
         self._tool_counts[tool_name] += 1
         if tool_name == "write_element" and arguments:
             aspect = arguments.get("aspect", "?")
             self._aspect_counts[aspect] += 1
+            eid = arguments.get("id", "") or (result or {}).get("element_id", "")
+            if eid:
+                self._created_ids.append(eid)
+        elif tool_name == "add_relationship" and arguments:
+            src = arguments.get("source_id", "?")
+            rel = arguments.get("rel_type", "?")
+            tgt = arguments.get("target_id", "?")
+            self._linked_pairs.append(f"{src} --{rel}--> {tgt}")
+        elif tool_name == "run_metrics" and result:
+            self._last_metrics = result
 
     @property
     def total_tokens(self) -> int:
@@ -59,7 +74,9 @@ class ContextCompactor:
             or self.total_tokens >= self._token_budget
         )
 
-    def compact(self, messages: list[Message], reason: str = "Completed") -> list[Message]:
+    def compact(
+        self, messages: list[Message], reason: str = "Completed"
+    ) -> list[Message]:
         """Compress history into a meaningful summary.
 
         Keeps: system prompt + summary + last 2 agent messages.
@@ -100,6 +117,9 @@ class ContextCompactor:
         self._tool_counts.clear()
         self._aspect_counts.clear()
         self._first_plan = ""
+        self._last_metrics = None
+        self._created_ids.clear()
+        self._linked_pairs.clear()
 
     def _build_summary(self, reason: str) -> str:
         """Build a readable summary of what was done."""
@@ -114,6 +134,26 @@ class ContextCompactor:
                 f"{a} (+{c})" for a, c in self._aspect_counts.most_common()
             )
             parts.append(f"Created: {aspects_str}")
+
+        # Recently created element IDs
+        if self._created_ids:
+            ids_str = ", ".join(self._created_ids[-30:])
+            parts.append(f"Element IDs (last 30): {ids_str}")
+
+        # Recent relationships
+        if self._linked_pairs:
+            rel_str = "; ".join(self._linked_pairs[-15:])
+            parts.append(f"Relationships (last 15): {rel_str}")
+
+        # Last metrics snapshot
+        if self._last_metrics:
+            m = self._last_metrics
+            parts.append(
+                f"Last metrics: {m.get('total_elements', '?')} elements, "
+                f"{m.get('total_relationships', '?')} relationships, "
+                f"connectivity={m.get('connectivity_index', '?')}, "
+                f"orphans={m.get('orphan_elements', '?')}"
+            )
 
         # Relationships and other
         other_tools = {

@@ -86,52 +86,83 @@ def hooks_start(config: str, fetch_since: str | None, fetch_limit: int) -> None:
 @click.option(
     "--path",
     "-p",
-    default=None,
+    default=".",
     envvar="SPEC_EDITOR_PROJECT",
     type=click.Path(exists=True),
-    help="Project path",
+    help="Project path (default: current directory)",
 )
 @click.option(
     "--file",
     "-f",
-    required=True,
+    default=None,
     type=click.Path(exists=True),
-    help="Source directory name",
+    help="Requirements file to analyze",
 )
 @click.option(
-    "--auto-apply",
-    is_flag=True,
-    help="Generate SRC and deprecate",
+    "--text",
+    "-t",
+    default=None,
+    help="Inline requirement text to analyze",
 )
-def analyze_cmd(path: str, file: str, auto_apply: bool) -> None:
-    """Analyze a requirements file: new, duplicates, replacements.
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Analyze only — do not write any SRC elements",
+)
+def analyze_cmd(
+    path: str, file: str | None, text: str | None, dry_run: bool
+) -> None:
+    """Analyze requirements from a file or inline text and create SRC elements.
 
-    spec-editor analyze -p . -f new_features.txt
-    spec-editor analyze -p . -f new_features.txt --auto-apply
+    \b
+    By file:        spec-editor analyze -p . -f new_features.txt
+    Inline text:    spec-editor analyze -p . -t "Users must login via SSO"
+    Dry-run only:   spec-editor analyze -p . -f new_features.txt --dry-run
     """
     import asyncio
+    import tempfile
     from pathlib import Path
 
-    from src.config.settings import AgentConfig, create_provider
+    from src.config.settings import AgentConfig, AgentsConfig, create_provider
     from src.ingestion.analyzer import ConflictDetector, DiffEngine
     from src.ingestion.preprocessor import FactExtractor, SourcePreprocessor
-    from src.storage.filesystem import FilesystemStorage
+
+    if not file and not text:
+        console.print("[red]Specify --file or --text[/red]")
+        raise SystemExit(1)
+
+    if file and text:
+        console.print("[red]Specify only one: --file or --text, not both[/red]")
+        raise SystemExit(1)
 
     project_path = Path(path).resolve()
     storage = FilesystemStorage(project_path)
-    provider = create_provider(
-        AgentConfig(provider="deepseek", model="deepseek/deepseek-chat")
-    )
-    file_path = Path(file)
 
-    # Read the file
-    text = SourcePreprocessor.read_file(file_path)
+    # Load agent config from project's agents.yaml, fall back to defaults
+    agents_path = project_path / "agents.yaml"
+    if agents_path.exists():
+        agents_config = AgentsConfig.from_yaml(agents_path)
+        agent = agents_config.agent_1
+    else:
+        agent = AgentConfig()
+    provider = create_provider(agent)
+
+    # Determine source name and content
+    if text:
+        source_name = "inline"
+        content = text
+    else:
+        file_path = Path(file)
+        source_name = file_path.name
+        content = SourcePreprocessor.read_file(file_path)
+
+    # Process the content
     extractor = FactExtractor(provider)
-    fact = extractor.extract(text)
+    fact = extractor.extract(content)
     diff_engine = DiffEngine(storage)
 
-    console.print(f"\n[bold]═══ : {file_path.name} ═══[/bold]\n")
-    console.print(f"[dim]: {fact.title}[/dim]\n")
+    console.print(f"\n[bold]═══ {source_name} ═══[/bold]\n")
+    console.print(f"[dim]{fact.title}[/dim]\n")
 
     diff = diff_engine.analyze(fact.title, fact.description)
 
@@ -140,7 +171,7 @@ def analyze_cmd(path: str, file: str, auto_apply: bool) -> None:
         console.print(f"  {fact.title}")
         console.print(f"  {fact.description[:200]}")
 
-        if auto_apply:
+        if not dry_run:
             from src.storage.models import Element, ElementStatus, Provenance
 
             next_id = 1
@@ -160,12 +191,12 @@ def analyze_cmd(path: str, file: str, auto_apply: bool) -> None:
                 title=fact.title,
                 content=fact.description,
                 status=ElementStatus.DRAFT,
-                provenance=Provenance(source=file_path.name),
+                provenance=Provenance(source=source_name),
             )
             storage.write_element(el)
             console.print(f"[green]  ✓  {src_id}[/green]")
         else:
-            console.print(f"[dim]  Run with --auto-apply to generate SRC[/dim]")
+            console.print(f"[dim]  Dry run — use without --dry-run to generate SRC[/dim]")
 
     elif diff.conflicts:
         console.print("[bold yellow]🔄 agent limit reached[/bold yellow]")
@@ -174,7 +205,7 @@ def analyze_cmd(path: str, file: str, auto_apply: bool) -> None:
         for c in diff.conflicts:
             console.print(f"  [yellow]⚠ {c}[/yellow]")
 
-        if auto_apply:
+        if not dry_run:
             storage.write_element(
                 storage.read_element(diff.matched_id).model_copy(
                     update={"status": ElementStatus("deprecated")}
@@ -201,13 +232,13 @@ def analyze_cmd(path: str, file: str, auto_apply: bool) -> None:
                 title=fact.title,
                 content=fact.description,
                 status=ElementStatus.DRAFT,
-                provenance=Provenance(source=file_path.name),
+                provenance=Provenance(source=source_name),
             )
             storage.write_element(el)
             console.print(f"[green]  ✓  {src_id}[/green]")
         else:
             console.print(
-                f"[dim]  Run with --auto-apply to deprecate + generate SRC[/dim]"
+                f"[dim]  Dry run — use without --dry-run to deprecate + generate SRC[/dim]"
             )
 
     else:
@@ -228,7 +259,7 @@ def analyze_cmd(path: str, file: str, auto_apply: bool) -> None:
 @click.option(
     "--transport",
     default="stdio",
-    type=click.Choice(["stdio", "http"]),
+    type=click.Choice(["stdio", "http", "socket"]),
     help="Transport: stdio (default) or http",
 )
 @click.option(
@@ -247,12 +278,25 @@ def analyze_cmd(path: str, file: str, auto_apply: bool) -> None:
     "--host",
     default="127.0.0.1",
     type=str,
-    help="HTTP host to bind to (default: 127.0.0.1)",
+    help="Ignored (always binds to 127.0.0.1 per REQ-002)",
+)
+@click.option(
+    "--socket",
+    "socket_path",
+    default="",
+    type=str,
+    help="Unix socket path (for transport=socket)",
 )
 @implements("SRC-007")
 @implements("MOD-003")
+@implements("REQ-002")
 def mcp(
-    path: str | None, transport: str, port: int, read_only: bool, host: str
+    path: str | None,
+    transport: str,
+    port: int,
+    read_only: bool,
+    host: str,
+    socket_path: str = "",
 ) -> None:
     """Start MCP server for external agents (stdio/json-rpc).
 

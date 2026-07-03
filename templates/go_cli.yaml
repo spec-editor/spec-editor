@@ -1,0 +1,50 @@
+# Go CLI tool
+#
+# Detection: go.mod + main package, cobra/urfave/cli framework.
+
+name: go_cli
+platform: go
+runtime: go >= 1.21
+description: >
+  Go command-line tool. Compiled to single static binary. Cobra for
+  subcommands, Viper for config. Cross-compile to all major platforms.
+
+detection:
+  files:
+    - go.mod
+  has_main_package: true
+  frameworks:
+    - spf13/cobra
+    - urfave/cli
+  not_frameworks:
+    - gin-gonic/gin
+    - gorilla/mux
+
+init:
+  - command: go mod download
+    description: Download dependencies
+
+test:
+  - command: go test ./... -v
+    description: Run tests
+  - command: go vet ./...
+    description: Static analysis
+
+build:
+  - command: |
+      GOOS=darwin  GOARCH=amd64 go build -o bin/{{project_slug}}-darwin-amd64 ./cmd/...
+      GOOS=darwin  GOARCH=arm64 go build -o bin/{{project_slug}}-darwin-arm64 ./cmd/...
+      GOOS=linux   GOARCH=amd64 go build -o bin/{{project_slug}}-linux-amd64  ./cmd/...
+      GOOS=windows GOARCH=amd64 go build -o bin/{{project_slug}}-windows-amd64.exe ./cmd/...
+    description: Cross-compile for all platforms
+
+deploy:
+  - command: |
+      gh release create v{{version}} bin/* \
+        --title "{{project_slug}} v{{version}}" --generate-notes
+    description: GitHub Release with binaries
+    optional: true
+
+artifacts:
+  - Cross-compiled binaries (darwin, linux, windows)
+  - Homebrew formula (optional)

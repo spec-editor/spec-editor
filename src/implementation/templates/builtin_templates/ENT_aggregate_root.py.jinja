@@ -1,0 +1,54 @@
+{#-
+  DDD Aggregate Root template — domain entity with identity + lifecycle.
+-#}
+"""{{ element.title }} — DDD Aggregate Root.
+
+Auto-generated from spec element {{ element.id }}.
+Pattern: hexagonal + DDD | Layer: domain | DDD type: aggregate_root
+
+An Aggregate Root is the entry point to an aggregate — it enforces
+consistency invariants across all entities within the aggregate boundary.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any
+from uuid import UUID, uuid4
+
+
+@dataclass
+class {{ element.title | replace(' ', '') | replace('-', '_') }}:
+    """{{ element.content | default('Aggregate root — business entity with identity and lifecycle.') }}"""
+
+    id: UUID = field(default_factory=uuid4)
+    created_at: datetime = field(default_factory=datetime.utcnow)
+    updated_at: datetime = field(default_factory=datetime.utcnow)
+
+    # ── Domain Events ──
+    _events: list[Any] = field(default_factory=list, init=False, repr=False)
+
+    def record_event(self, event: Any) -> None:
+        """Record a domain event for later dispatch."""
+        self._events.append(event)
+
+    def pull_events(self) -> list[Any]:
+        """Collect and clear pending domain events."""
+        events = self._events
+        self._events = []
+        return events
+
+    # ── Identity ──
+
+    def __hash__(self) -> int:
+        return hash(self.id)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, {{ element.title | replace(' ', '') | replace('-', '_') }}):
+            return False
+        return self.id == other.id
+
+    # ── Business methods ──
+    # TODO: Implement domain logic as methods on this aggregate.
+    # Methods should enforce invariants and record domain events.

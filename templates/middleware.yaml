@@ -1,0 +1,48 @@
+# Python middleware / library package
+# No server — just a reusable package with public API.
+#
+# Detection: pyproject.toml or setup.py, no web framework dependency.
+
+name: middleware
+platform: python
+runtime: python >= 3.11
+description: >
+  Python library or middleware package. Installed as a dependency by
+  other services. No standalone server — provides imports only.
+
+detection:
+  files:
+    - pyproject.toml
+    - setup.py
+  any_of: true
+  frameworks: []        # absence of web framework = middleware
+  dirs:
+    - src
+
+init:
+  - command: python3 -m venv .venv
+    description: Create virtual environment
+  - command: .venv/bin/pip install --upgrade pip
+    description: Upgrade pip
+  - command: .venv/bin/pip install -e ".[dev]"
+    description: Install in development mode
+
+test:
+  - command: .venv/bin/python -m pytest tests/ -q --tb=short
+    description: Run tests
+  - command: .venv/bin/ruff check src/
+    description: Lint
+    optional: true
+
+build:
+  - command: .venv/bin/python -m build
+    description: Build wheel and sdist
+
+deploy:
+  - command: .venv/bin/twine upload dist/*
+    description: Publish to PyPI
+    optional: true
+
+artifacts:
+  - Python wheel (.whl)
+  - Source distribution (.tar.gz)

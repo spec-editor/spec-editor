@@ -1,0 +1,60 @@
+# React SPA — Vite + TypeScript
+#
+# Detection: package.json with react + vite dependency, vite.config.ts
+
+name: react_spa
+platform: node
+runtime: node >= 20
+description: >
+  React Single Page Application using Vite + TypeScript.
+  Client-side routing with react-router. Built for static deployment
+  or served behind nginx/CDN.
+
+detection:
+  files:
+    - package.json
+    - vite.config.ts
+    - vite.config.js
+  any_of_config: true
+  frameworks:
+    - react
+    - react-dom
+  build_tool:
+    - vite
+
+init:
+  - command: npm ci
+    description: Install dependencies (clean)
+  - command: cp .env.example .env
+    description: Copy environment template
+    optional: true
+    condition:
+      file: .env.example
+
+test:
+  - command: npx vitest run --reporter=verbose
+    description: Run Vitest unit tests
+    optional: true
+  - command: npx tsc --noEmit
+    description: TypeScript type check
+  - command: npx eslint src/ --ext .ts,.tsx
+    description: Lint
+    optional: true
+
+build:
+  - command: npx tsc -b
+    description: TypeScript compilation
+  - command: npx vite build
+    description: Vite production build
+
+deploy:
+  - command: rsync -avz dist/ {{deploy_host}}:{{deploy_path}}/
+    description: Deploy static files via rsync
+    optional: true
+  - command: npx wrangler pages deploy dist/
+    description: Deploy to Cloudflare Pages
+    optional: true
+
+artifacts:
+  - dist/ directory (static HTML/JS/CSS)
+  - Can be served by nginx, CDN, or S3+CloudFront

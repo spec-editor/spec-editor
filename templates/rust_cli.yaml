@@ -1,0 +1,53 @@
+# Rust CLI tool
+#
+# Detection: Cargo.toml, no web framework dependency (clap/structopt instead).
+
+name: rust_cli
+platform: rust
+runtime: rust >= 1.75
+description: >
+  Rust command-line tool. Single binary, zero runtime dependencies.
+  Uses Clap for argument parsing. Installable via cargo install or
+  direct binary download.
+
+detection:
+  files:
+    - Cargo.toml
+  has_bin: true
+  frameworks:
+    - clap
+    - structopt
+  not_frameworks:
+    - actix-web
+    - axum
+    - warp
+    - rocket
+
+init:
+  - command: cargo fetch
+    description: Fetch dependencies
+
+test:
+  - command: cargo test --release
+    description: Run tests
+  - command: cargo clippy -- -D warnings
+    description: Lint
+
+build:
+  - command: cargo build --release
+    description: Build release binary
+
+deploy:
+  - command: cargo publish
+    description: Publish to crates.io
+    optional: true
+  - command: |
+      ARCH=$(uname -m); OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+      gh release create v{{version}} target/release/{{project_slug}} \
+        --title "{{project_slug}} v{{version}}" --generate-notes
+    description: GitHub Release with binary
+    optional: true
+
+artifacts:
+  - Single statically-linked binary
+  - Published to crates.io (optional)

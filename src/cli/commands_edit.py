@@ -1,18 +1,18 @@
 """CLI subcommand."""
 
+import asyncio
 from pathlib import Path
 
 import click
 from rich.console import Console
+from rich.table import Table
 
-from src.cli.commands import cli, console, _BUILTIN_METHODOLOGIES
-
+from src.agents.questions import QuestionList
+from src.cli.commands import _BUILTIN_METHODOLOGIES, cli, console
+from src.config.settings import AgentConfig, create_provider
 from src.ingestion.manager import deprecate_from_file
 from src.storage.filesystem import FilesystemStorage
-from src.config.settings import AgentConfig, create_provider
-from src.agents.questions import QuestionList
-from rich.table import Table
-import asyncio
+
 
 @cli.command(name="questions")
 @click.option(
@@ -126,9 +126,10 @@ def deprecate_cmd(
         tmp.write_text(text, encoding="utf-8")
         from_file = str(tmp)
 
-    provider = create_provider(
-        AgentConfig(provider="deepseek", model="deepseek/deepseek-chat")
-    )
+    from src.config.settings import Settings
+
+    settings = Settings()
+    provider = create_provider(settings)
 
     async def _run():
         return await deprecate_from_file(
@@ -195,5 +196,3 @@ def restore_cmd(path: str, ids: tuple[str, ...]) -> None:
             console.print(f"[dim]{item['id']}: was not deprecated[/dim]")
     if result.get("not_found"):
         console.print(f"[red]Not found: {', '.join(result['not_found'])}[/red]")
-
-

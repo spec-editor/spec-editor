@@ -1,0 +1,42 @@
+# Vanilla PHP — no framework
+#
+# Detection: composer.json without major framework, or plain .php files + no framework.
+
+name: vanilla_php
+platform: php
+runtime: php >= 8.1
+description: >
+  Plain PHP project without a major framework. Composer for autoloading,
+  custom routing, no ORM. Suitable for microservices, simple APIs, or
+  legacy projects.
+
+detection:
+  files:
+    - composer.json
+  not_frameworks:
+    - laravel/framework
+    - wordpress
+    - symfony/framework-bundle
+
+init:
+  - command: composer install --no-interaction
+    description: Install dependencies
+    condition:
+      file: composer.json
+
+test:
+  - command: vendor/bin/phpunit
+    description: Run PHPUnit
+    optional: true
+
+build:
+  - command: composer install --no-dev --optimize-autoloader
+    description: Production build
+
+deploy:
+  - command: rsync -avz --exclude .git ./ {{deploy_host}}:{{deploy_path}}/
+    description: Deploy via rsync
+    optional: true
+
+artifacts:
+  - PHP files + vendor/ autoloader

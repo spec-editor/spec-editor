@@ -1,0 +1,26 @@
+# Spec Editor Frontend (Next.js)
+# =============================================================================
+# Stage 1: Build
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY packages/frontend/package.json packages/frontend/package-lock.json ./
+RUN npm ci
+
+COPY packages/frontend/ ./
+RUN STATIC_EXPORT=1 npm run build
+
+# Stage 2: Production server (nginx for static export)
+FROM nginx:1.27-alpine
+
+# Copy static files from builder
+COPY --from=builder /app/out /usr/share/nginx/html
+
+# Custom nginx config: proxy /api/mcp to MCP server
+COPY packages/frontend/nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD wget -qO- http://127.0.0.1:80/ || exit 1

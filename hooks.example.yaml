@@ -1,0 +1,24 @@
+# ============================================================================
+# Spec Editor — Telegram Notification Hooks (TEMPLATE)
+# ============================================================================
+# Copy this file to hooks.yaml and fill in your values.
+# hooks.yaml is gitignored — never commit real credentials.
+#
+# To get Telegram API credentials:
+#   1. Go to https://my.telegram.org/apps
+#   2. Create an app to get api_id and api_hash
+#   3. Use @BotFather to create a bot for notifications
+# ============================================================================
+
+# Telegram API credentials (from https://my.telegram.org/apps)
+api_id: 0                         # Replace with your API ID
+api_hash: ""                      # Replace with your API hash
+phone: ""                         # Your phone number in international format
+
+# Monitored projects
+projects:
+  - name: my-project
+    spec_path: /absolute/path/to/project
+    chats:
+      - id: 0                     # Telegram chat ID for notifications
+        title: "Project Alerts"
