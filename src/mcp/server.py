@@ -186,10 +186,10 @@ class MCPHandler:
             SPEC_EDITOR_MOUNT_CONTAINER — corresponding path inside the container
 
           Example:
-            Host path:      /Users/dmitry/Documents/Droid/gen-panel/prompt3
-            Mount host:     /Users/dmitry/Documents/Droid
+            Host path:      /workspace/my-project
+            Mount host:     /workspace
             Mount container: /projects
-            Result:         /projects/gen-panel/prompt3
+            Result:         /projects/my-project
 
           If no env vars are configured, falls back to legacy behaviour:
           /projects/<basename>.

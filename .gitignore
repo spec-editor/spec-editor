@@ -115,9 +115,12 @@ new_features.txt
 deploy.yaml
 
 # ──────────────────────────────────────────────────────────────
-# Paid / premium content (keep out of OSS repo)
+# Paid / Pro content — NOT in OSS repo
 # ──────────────────────────────────────────────────────────────
 paid-methodologies/
+cloud-proxy/                              # Cloud token proxy backend (paid)
+plugins/cycle/                            # Pro multi-agent codegen plugin (paid)
+src/licensing/gumroad.py                  # GumRoad API integration (paid)
 
 # ──────────────────────────────────────────────────────────────
 # Session artifacts
@@ -148,3 +151,61 @@ run.log
 # Agent skills (personal / custom)
 # ──────────────────────────────────────────────────────────────
 .agents/
+
+# ──────────────────────────────────────────────────────────────
+# AI tool history & context (personal)
+# ──────────────────────────────────────────────────────────────
+.aider*
+.opencode*
+
+# ──────────────────────────────────────────────────────────────
+# Session context (generated per-project)
+# ──────────────────────────────────────────────────────────────
+NEW_SESSION_CONTEXT.md
+
+# ──────────────────────────────────────────────────────────────
+# Agent task queue artifacts (runtime state)
+# ──────────────────────────────────────────────────────────────
+tasks/
+
+# ──────────────────────────────────────────────────────────────
+# One-off utility scripts (not part of the product)
+# ──────────────────────────────────────────────────────────────
+fix_coverage.py
+run_codegen.py
+
+# ──────────────────────────────────────────────────────────────
+# VS Code extension test binaries (huge — 2+ GB)
+# ──────────────────────────────────────────────────────────────
+.vscode-test/
+packages/vscode-extension/.vscode-test/
+
+# ──────────────────────────────────────────────────────────────
+# Frontend build output
+# ──────────────────────────────────────────────────────────────
+packages/frontend/.next/
+packages/frontend/out/
+packages/frontend/node_modules/
+
+# ──────────────────────────────────────────────────────────────
+# VSCode extension build output
+# ──────────────────────────────────────────────────────────────
+packages/vscode-extension/node_modules/
+packages/vscode-extension/out/
+
+# ──────────────────────────────────────────────────────────────
+# Rust / Zed extension build output
+# ──────────────────────────────────────────────────────────────
+packages/zed-extension/target/
+
+# ──────────────────────────────────────────────────────────────
+# JetBrains extension build output
+# ──────────────────────────────────────────────────────────────
+packages/jetbrains-extension/build/
+packages/jetbrains-extension/out/
+packages/jetbrains-extension/.gradle/
+
+# ──────────────────────────────────────────────────────────────
+# Node modules — never commit
+# ──────────────────────────────────────────────────────────────
+node_modules/

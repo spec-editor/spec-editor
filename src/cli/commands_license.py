@@ -72,7 +72,14 @@ def license_status(path: str):
         console.print("[bold]Validating license...[/bold]")
         try:
             from src.licensing.gumroad import GumRoadLicenseProvider
+        except ImportError:
+            console.print(
+                "[yellow]GumRoad validation requires spec-editor-pro.[/yellow]\n"
+                "  Install: [cyan]pip install spec-editor-pro[/cyan]"
+            )
+            return
 
+        try:
             provider = GumRoadLicenseProvider(
                 product_id=license_cfg.get("product_id", ""),
             )
@@ -153,7 +160,14 @@ def license_activate(license_key: str, path: str, product: str):
 
     try:
         from src.licensing.gumroad import GumRoadLicenseProvider
+    except ImportError:
+        console.print(
+            "[red]GumRoad validation requires spec-editor-pro.[/red]\n"
+            "  Install: [cyan]pip install spec-editor-pro[/cyan]"
+        )
+        raise SystemExit(1)
 
+    try:
         provider = GumRoadLicenseProvider(product_id=product_id)
         status = asyncio.run(
             provider.validate_key(key, product=product, increment_uses=True)
