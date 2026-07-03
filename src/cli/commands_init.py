@@ -97,8 +97,8 @@ def init(
 
     shutil.copy(method_path, project_path / "methodology.yaml")
 
-    # Copy skills.yaml if present (from project root, not data/)
-    skills_path = _BUILTIN_METHODOLOGIES.parent.parent / "skills.yaml"
+    # Copy skills.yaml from data/ to project root
+    skills_path = _BUILTIN_METHODOLOGIES.parent / "skills.yaml"
     if skills_path.exists():
         shutil.copy(skills_path, project_path / "skills.yaml")
 

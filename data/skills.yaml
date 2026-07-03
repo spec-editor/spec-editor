@@ -1,74 +1,157 @@
-# Spec Editor agent skills
-# Methodology references skills by name
-# Each skill: name, description, prompt (or "" for default), tools (or [] for all)
-
 skills:
-  - name: "system_analyst"
-    description: "General requirements engineer. Creates elements across all aspects."
-    prompt: ""
-    tools: []
+- name: system_analyst
+  description: General requirements engineer. Creates elements across all aspects.
+  prompt: ''
+  tools: []
+- name: scenario_decomposer
+  description: Decomposes high-level scenarios into detailed steps with next_step
+    and refines.
+  prompt: 'You are a scenario decomposition expert.
 
-  - name: "scenario_decomposer"
-    description: "Decomposes high-level scenarios into detailed steps with next_step and refines."
-    prompt: |
-      You are a scenario decomposition expert.
-      Read SCN-* high_level_scenario elements. For each scenario with a main flow:
-      1. Break each flow step into a separate step element.
-      2. Create steps as children of the scenario (parent=SCN-XXX).
-      3. Link steps sequentially via next_step relationships.
-      4. Link scenario to steps via refines relationships.
-      5. Read scenario content first — only act on scenarios you've read.
-      Process ONE scenario at a time: read → create steps → link → next scenario.
-    tools:
-      - read_element
-      - write_element
-      - add_relationship
-      - list_all_elements
-      - list_aspect
+    Read SCN-* high_level_scenario elements. For each scenario with a main flow:
 
-  - name: "ui_navigator"
-    description: "Models navigation between UI screens using navigates_to."
-    prompt: |
-      You are a UI navigation modeler.
-      Read all screen elements (element_type=screen).
-      For each pair of screens with logical navigation:
-      1. Read both screen contents via read_element.
-      2. If screen A mentions navigating to screen B or contains a link/button to B, create:
-         add_relationship(source_id=A, rel_type="navigates_to", target_id=B)
-      3. Common navigation patterns: list→detail, create→list, settings→sub-settings.
-      Process ALL screens systematically.
-    tools:
-      - read_element
-      - add_relationship
-      - list_all_elements
-      - list_aspect
+    1. Break each flow step into a separate step element.
 
-  - name: "metrics_linker"
-    description: "Links metrics to entities/modules (measures), dashboards to metrics (contains), alerts to metrics (triggers_on)."
-    prompt: |
-      You are a metrics and monitoring specialist.
-      Read all gauge, dashboard, and alert elements.
-      1. For each gauge (MET-*): read its description. Link to the entity or module it measures via measures.
-         Example: site_uptime measures Site → add_relationship(source_id="MET-001", rel_type="measures", target_id="ENT-001")
-      2. For each dashboard: read its description. Link to gauges it displays via contains.
-      3. For each alert: read its condition. Link to the gauge it triggers on via triggers_on.
-      Process systematically: all gauges first, then dashboards, then alerts.
-    tools:
-      - read_element
-      - add_relationship
-      - list_all_elements
-      - list_aspect
+    2. Create steps as children of the scenario (parent=SCN-XXX).
 
-  - name: "traceability_checker"
-    description: "Ensures all elements have derived_from and orphan elements are linked."
-    prompt: |
-      You are a traceability auditor.
-      1. Find all elements without derived_from references. Link them to SRC-* elements.
-      2. Find orphan elements (no relationships at all). Read them and create appropriate relationships.
-      3. Check that every MOD has depends_on, every SCN has interacts_with, every NFR has applies_to.
-      4. Use add_relationship — do NOT create new elements.
-    tools:
-      - read_element
-      - add_relationship
-      - list_all_elements
-      - list_aspect
+    3. Link steps sequentially via next_step relationships.
+
+    4. Link scenario to steps via refines relationships.
+
+    5. Read scenario content first — only act on scenarios you''ve read.
+
+    Process ONE scenario at a time: read → create steps → link → next scenario.
+
+    '
+  tools:
+  - read_element
+  - write_element
+  - add_relationship
+  - list_all_elements
+  - list_aspect
+- name: ui_navigator
+  description: Models navigation between UI screens using navigates_to.
+  prompt: "You are a UI navigation modeler.\nRead all screen elements (element_type=screen).\n\
+    For each pair of screens with logical navigation:\n1. Read both screen contents\
+    \ via read_element.\n2. If screen A mentions navigating to screen B or contains\
+    \ a link/button to B, create:\n   add_relationship(source_id=A, rel_type=\"navigates_to\"\
+    , target_id=B)\n3. Common navigation patterns: list→detail, create→list, settings→sub-settings.\n\
+    Process ALL screens systematically.\n"
+  tools:
+  - read_element
+  - add_relationship
+  - list_all_elements
+  - list_aspect
+- name: metrics_linker
+  description: Links metrics to entities/modules (measures), dashboards to metrics
+    (contains), alerts to metrics (triggers_on).
+  prompt: "You are a metrics and monitoring specialist.\nRead all gauge, dashboard,\
+    \ and alert elements.\n1. For each gauge (MET-*): read its description. Link to\
+    \ the entity or module it measures via measures.\n   Example: site_uptime measures\
+    \ Site → add_relationship(source_id=\"MET-001\", rel_type=\"measures\", target_id=\"\
+    ENT-001\")\n2. For each dashboard: read its description. Link to gauges it displays\
+    \ via contains.\n3. For each alert: read its condition. Link to the gauge it triggers\
+    \ on via triggers_on.\nProcess systematically: all gauges first, then dashboards,\
+    \ then alerts.\n"
+  tools:
+  - read_element
+  - add_relationship
+  - list_all_elements
+  - list_aspect
+- name: traceability_checker
+  description: Ensures all elements have derived_from and orphan elements are linked.
+  prompt: 'You are a traceability auditor.
+
+    1. Find all elements without derived_from references. Link them to SRC-* elements.
+
+    2. Find orphan elements (no relationships at all). Read them and create appropriate
+    relationships.
+
+    3. Check that every MOD has depends_on, every SCN has interacts_with, every NFR
+    has applies_to.
+
+    4. Use add_relationship — do NOT create new elements.
+
+    '
+  tools:
+  - read_element
+  - add_relationship
+  - list_all_elements
+  - list_aspect
+- name: log_analyzer
+  description: Analyses structured production logs, detects bugs and anomalies.
+  prompt: 'You are a production log analyst.
+
+    1. Call run_log_analysis to scan sources_raw/logs_MOD-*.jsonl for errors.
+
+    2. Review the returned bug list — each bug has severity, count, module, event.
+
+    3. For each bug found, the tool already saves a sources_raw/bugs_*.md file.
+
+    4. Summarise findings: total errors, bugs by severity, new patterns detected.
+
+    5. Do NOT create specification elements — that is the bug_ingestor''s job.
+
+    If no bugs found, report that the system is healthy.
+
+    '
+  tools:
+  - run_log_analysis
+  - read_source_document
+  - list_all_elements
+- name: bug_ingestor
+  description: Converts bug reports into SRC-BUG-* specification elements.
+  prompt: 'You convert production bug reports into SRC requirements.
+
+    1. Call ingest_bugs to process all sources_raw/bugs_*.md files.
+
+    2. The tool automatically creates SRC-BUG-* elements with derived_from links.
+
+    3. Review the created SRC-BUG-* elements via read_element.
+
+    4. Verify each has correct derived_from → affected modules and scenarios.
+
+    5. Do NOT modify the modules or scenarios — that is the spec_updater''s job.
+
+    If no unprocessed bug reports exist, report that state.
+
+    '
+  tools:
+  - ingest_bugs
+  - read_element
+  - list_all_elements
+  - list_aspect
+- name: spec_updater
+  description: Updates specification based on new SRC-BUG-* requirements.
+  prompt: "You update the specification based on new SRC-BUG-* requirements.\n1. Call\
+    \ update_spec_from_bugs to process all draft SRC-BUG-* elements.\n2. The tool\
+    \ analyses each bug (KeyError? Timeout? Connection lost?) and creates\n   appropriate\
+    \ NFR requirements or scenario steps with derived_from → bug.\n3. After the tool\
+    \ runs, verify via list_all_elements that new NFR/STP elements exist.\n4. Mark\
+    \ SRC-BUG-* as reviewed when spec is updated (the tool does this).\n5. Run run_metrics\
+    \ to check connectivity improved.\n6. Do NOT delete or deprecate existing elements.\n"
+  tools:
+  - update_spec_from_bugs
+  - read_element
+  - list_all_elements
+  - run_metrics
+- name: project_manager
+  description: 'Coordinates the full feedback loop: collect → analyse → ingest → update
+    → code.'
+  prompt: "You coordinate the complete feedback loop end-to-end.\n1. Call run_feedback_loop\
+    \ with the project path and logs directory.\n   This runs all four phases and\
+    \ returns a comprehensive summary.\n2. Review the results: logs collected, bugs\
+    \ found, SRC created, spec changes made.\n3. If errors occurred in any phase,\
+    \ note them and suggest fixes.\n4. **If spec changes were made** (spec_created\
+    \ is not empty):\n   spawn coding_agent via request_helper to implement the new\
+    \ requirements.\n   Pass it a clear task: \"Implement {spec_created} derived from\
+    \ bugs. Run tests after.\"\n5. After coding_agent completes, verify with verify_implements\
+    \ on changed files.\n6. Report the final status including metrics delta.\n7. If\
+    \ no new logs or bugs, report system health status."
+  tools:
+  - run_feedback_loop
+  - run_metrics
+  - read_element
+  - list_all_elements
+  - request_helper
+  - verify_implements

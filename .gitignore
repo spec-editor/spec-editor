@@ -51,6 +51,7 @@ dialogue.yaml
 
 # spec-editor lock & run files
 .spec-editor-*
+.spec-editor/
 
 # License validation cache (contains license keys)
 license.cache
@@ -79,6 +80,7 @@ source/
 methodology.yaml
 !data/methodology.yaml
 agents.yaml
+skills.yaml                     # Copied from data/skills.yaml by spec-editor init
 
 # ──────────────────────────────────────────────────────────────
 # Ingestion pipeline output
@@ -140,6 +142,11 @@ docs/demo.tape
 # ──────────────────────────────────────────────────────────────
 index.html
 landing/
+
+# ──────────────────────────────────────────────────────────────
+# Duplicate / backup files
+# ──────────────────────────────────────────────────────────────
+*methodology copy*
 
 # ──────────────────────────────────────────────────────────────
 # Backend runtime
