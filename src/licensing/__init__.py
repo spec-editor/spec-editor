@@ -139,9 +139,21 @@ def create_license_provider(
 
 
 def _create_gumroad_provider(cfg: dict) -> LicenseProvider:
-    """Create a GumRoad-backed license provider."""
-    from src.licensing.cache import LicenseCache
-    from src.licensing.gumroad import GumRoadLicenseProvider
+    """Create a GumRoad-backed license provider.
+
+    Requires the Pro plugin (spec-editor-pro) to be installed.
+    Falls back to noop if the gumroad module is not available.
+    """
+    try:
+        from src.licensing.cache import LicenseCache
+        from src.licensing.gumroad import GumRoadLicenseProvider
+    except ImportError:
+        import logging
+        logging.getLogger(__name__).warning(
+            "GumRoad license backend requires spec-editor-pro. "
+            "Falling back to Free tier."
+        )
+        return NoopLicenseProvider()
 
     cache_path = cfg.get("cache_path", "~/.spec-editor/license.cache")
     cache_ttl = int(cfg.get("cache_ttl_days", 7))

@@ -283,8 +283,8 @@ async function run() {
     // ── Project lifecycle ────────────────────────────────────────────
     check("Scenario: auto-init creates methodology.yaml", function () {
       // After autoStartMcp, the workspace (Product/) should have methodology.yaml
-      var fs = require("fs");
-      var projDir = "/Users/dmitry/Documents/Droid/spec-editor2/Product";
+      var path = require("path");
+      var projDir = path.resolve(__dirname, "..", "..", "..", "..", "Product");
       var exists = fs.existsSync(projDir + "/methodology.yaml");
       assert.ok(exists, "methodology.yaml should exist in workspace");
     }),
@@ -789,7 +789,7 @@ async function run() {
       }
       assert.ok(ready, "MCP server not reachable before switch test");
 
-      var projectPath = "/Users/dmitry/Documents/Droid/spec-editor2/Product";
+      var projectPath = path.resolve(__dirname, "..", "..", "..", "..", "Product");
       await vscode.commands.executeCommand(
         "specEditor._testSwitchProject",
         projectPath,
@@ -805,7 +805,7 @@ async function run() {
     check("Scenario: project persists in workspaceState", async function () {
       // Simulate: user opens project, reload happens, project restores.
       // 1. Switch to project (this saves lastProject)
-      var projectPath = "/Users/dmitry/Documents/Droid/spec-editor2/Product";
+      var projectPath = path.resolve(__dirname, "..", "..", "..", "..", "Product");
       await vscode.commands.executeCommand(
         "specEditor._testSwitchProject",
         projectPath,
