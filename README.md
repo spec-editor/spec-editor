@@ -6,7 +6,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-blue.svg" alt="Apache 2.0"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+"></a>
-  <a href="tests/"><img src="https://img.shields.io/badge/tests-360-green.svg" alt="360 tests"></a>
+  <a href="tests/"><img src="https://img.shields.io/badge/tests-340+-green.svg" alt="340+ tests"></a>
 </p>
 
 <p align="center">
@@ -35,6 +35,40 @@ stays aligned with your requirements.
 > [!NOTE]
 > Spec Editor works with any OpenAI-compatible API (DeepSeek, OpenAI, Anthropic).
 > Default: DeepSeek Reasoner (~$0.55/M tokens, 5× cheaper than GPT-4).
+
+---
+
+## Who Is This For?
+
+- **Business analysts** — turn stakeholder interviews and vague docs into structured specs
+- **System analysts** — decompose requirements into modules, data models, and API contracts
+- **Engineering teams** — need traceability from requirements to deployed code
+- **Technical PMs** — tired of Word docs and Jira tickets drifting apart over time
+- **AI-assisted developers** — using Cursor, Claude Code, or Zed — give your coding agent full spec context
+- **Startups** — need structured requirements without hiring a dedicated systems analyst
+
+---
+
+## Before & After
+
+**Input** — a single paragraph in `source/readme.md`:
+
+> "We need a user authentication system with login, registration, and password reset."
+
+**Output** — structured specification in `aspects/`:
+
+```
+aspects/
+├── modules/MOD-003.md        Authentication Module
+├── user_scenarios/SCN-007.md  User Login (happy path, error states, rate limiting)
+├── user_scenarios/SCN-008.md  Password Reset (email flow, token expiry)
+├── user_interface/UI-005.md   Login Form (widgets, validation rules)
+├── data_entities/ENT-004.md   User entity (fields, constraints, relationships)
+└── non_functional/NFR-002.md  Auth latency < 200ms, bcrypt hashing, OWASP compliance
+```
+
+Each element is a version-controlled Markdown file with YAML frontmatter —
+diffable, mergeable, and connected via bidirectional traceability links.
 
 ---
 
@@ -183,7 +217,7 @@ Full API reference: [readme_mcp.md](readme_mcp.md)
 | **Multi-agent dialogue** | 2 agents + orchestrator debate requirements in structured rounds |
 | **Skill-based helpers** | Agents spawn specialised helpers: scenario decomposer, UI navigator, metrics linker |
 | **Methodology-driven** | Waterfall decomposes into 8 aspects: modules, scenarios, UI, data, NFR, metrics, implementation, sources |
-| **MCP server** | 19 tools — connect to Claude Code, Cursor, Zed for context-aware code generation |
+| **MCP server** | 20+ tools — connect to Claude Code, Cursor, Zed for context-aware code generation |
 | **Export formats** | SRS (IEEE 830), TRLC (BMW), OpenAPI 3.0, Jira CSV, styled HTML |
 | **Git-native** | Everything is Markdown + YAML in git — version, diff, merge, blame |
 
@@ -217,7 +251,7 @@ spec-editor view -p ./my-project         # Interactive Mermaid graph
 spec-editor validate -p ./my-project     # Validate specification
 spec-editor status -p ./my-project       # Show spec status
 spec-editor export -p ./my-project       # Export to SRS/TRLC/OpenAPI/Jira/HTML
-spec-editor mcp                          # Start MCP server (19 tools)
+spec-editor mcp                          # Start MCP server (20+ tools)
 ```
 
 ---

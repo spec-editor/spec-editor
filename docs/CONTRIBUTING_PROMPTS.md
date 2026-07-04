@@ -24,7 +24,7 @@ pip install -e ".[dev]"
 
 ### 2. Edit prompts
 
-Edit `prompts/{lang}.yaml`. Key sections:
+Edit `data/prompts/{lang}.yaml`. Key sections:
 
 - `spec_agent` — main agent instructions with examples
 - `orchestrator` — dialogue moderator
