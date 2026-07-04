@@ -17,6 +17,8 @@ cd my-project
 
 This creates a project with a sample requirements document in `source/readme.md`.
 
+For a blank project, omit `--with-example`. Use `--non-interactive` to skip prompts.
+
 ## 3. Run the agents
 
 ```bash
