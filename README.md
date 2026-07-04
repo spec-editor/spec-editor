@@ -97,10 +97,9 @@ pip install spec-editor
 spec-editor demo              # opens pre-generated spec in browser
 
 # 2. Create project and run agents
-spec-editor init my-project   # creates project structure
+spec-editor init my-project --with-example   # creates project with sample requirements
 cd my-project
-# Put your requirements in source/ — or use --with-example
-spec-editor run               # needs DEEPSEEK_API_KEY in .env
+spec-editor run                               # needs DEEPSEEK_API_KEY in .env
 
 # 3. Connect to your AI coding agent
 spec-editor mcp &             # start MCP server in background

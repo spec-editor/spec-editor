@@ -1,12 +1,16 @@
 """CLI subcommand."""
 
+import os
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
 import click
 import yaml
 from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
 
 from src.cli.commands import (
     _BUILTIN_METHODOLOGIES,
@@ -18,91 +22,205 @@ from src.cli.commands import (
 from src.config.methodology import load_methodology
 from src.config.settings import AgentConfig, AgentsConfig
 
+from src.agents.constants import (
+    AGENT_1,
+    AGENT_2,
+    ALL_PROVIDERS,
+    CONFIG_KEY_AGENTS,
+    CONFIG_KEY_MAX_ROUNDS,
+    CONFIG_KEY_MAX_TIME_MINUTES,
+    DEFAULT_CHAT_MODEL,
+    DEFAULT_METHODOLOGY,
+    DEFAULT_PROVIDER,
+    DEFAULT_REASONING_MODEL,
+    DEFAULT_REDIS_URL,
+    ORCHESTRATOR,
+    PROVIDER_ENV_VARS,
+)
+
 # ======================================================================
 # init
 # ======================================================================
 
+_EXAMPLE_TEMPLATE = """\
+# Online Bookstore — Requirements
+
+A web application for selling books online. Customers browse a catalog,
+add items to cart, and complete purchases with credit card payment.
+
+## Purpose
+Replace the existing spreadsheet-based order system with a self-service
+web store for retail customers.
+
+## Key Features
+- Book catalog with search by title, author, and category
+- Shopping cart with quantity management
+- Checkout: shipping address, credit card payment, order confirmation
+- User accounts: registration, login, order history
+- Admin dashboard: inventory management, order processing, discount codes
+
+## Constraints
+- Page load time < 2 seconds under normal load
+- Support 1000 concurrent users during peak hours
+- PCI-DSS compliance for credit card payments
+- GDPR compliance for user data (export, deletion)
+- Inventory must not oversell (concurrent checkout safety)
+"""
+
+
+def _check_docker() -> bool:
+    """Check if Docker is installed and running."""
+    try:
+        result = subprocess.run(
+            ["docker", "info"], capture_output=True, text=True, timeout=5
+        )
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def _check_project_initialized(project_path: Path) -> bool:
+    """Check if a spec-editor project is already initialized."""
+    return (project_path / "methodology.yaml").exists()
+
+
+def _read_existing_config(project_path: Path) -> dict[str, Any]:
+    """Read existing configuration for smart defaults on re-init."""
+    defaults: dict[str, Any] = {}
+
+    agents_yaml = project_path / "agents.yaml"
+    if agents_yaml.exists():
+        try:
+            config = yaml.safe_load(agents_yaml.read_text())
+            agents = config.get(CONFIG_KEY_AGENTS, {})
+            defaults["agent_1_provider"] = agents.get(AGENT_1, {}).get("provider", DEFAULT_PROVIDER)
+            defaults["agent_1_model"] = agents.get(AGENT_1, {}).get("model", DEFAULT_REASONING_MODEL)
+            defaults["agent_2_model"] = agents.get(AGENT_2, {}).get("model", DEFAULT_CHAT_MODEL)
+        except Exception:
+            pass
+
+    local_yaml = project_path / "local.yaml"
+    if local_yaml.exists():
+        try:
+            config = yaml.safe_load(local_yaml.read_text())
+            defaults["report_errors"] = config.get("report_errors", True)
+            defaults["use_web_ui"] = config.get("use_web_ui", False)
+        except Exception:
+            pass
+
+    return defaults
+
 
 @cli.command()
-@click.argument("path", type=click.Path())
-@click.option("--methodology", "-m", default="waterfall", help="Methodology name")
-@click.option(
-    "--agents",
-    "-a",
-    default=None,
-    type=click.Path(exists=True),
-    help="YAML with agent configuration",
-)
-@click.option(
-    "--with-example",
-    is_flag=True,
-    help="Include a sample requirements document to try spec-editor run",
-)
-@click.option(
-    "--provider", default=None, help="LLM provider (openai, anthropic, deepseek, etc.)"
-)
-@click.option(
-    "--model", default=None, help="Model name (e.g. gpt-4o, claude-sonnet-4-20250514)"
-)
-@click.option("--temperature", type=float, default=None, help="Temperature (0.0-2.0)")
-@click.option("--max-tokens", type=int, default=None, help="Max tokens per response")
-@click.option(
-    "--api-key", default=None, envvar="LLM_API_KEY", help="API key for LLM provider"
-)
+@click.argument("path", type=click.Path(), default=".")
+@click.option("--methodology", "-m", default=DEFAULT_METHODOLOGY, help="Methodology name")
+@click.option("--non-interactive", is_flag=True, help="Skip interactive prompts, use defaults")
+@click.option("--with-example", is_flag=True, help="Include a sample requirements document to try spec-editor run")
 def init(
     path: str,
     methodology: str,
-    agents: str | None,
+    non_interactive: bool = False,
     with_example: bool = False,
-    provider: str | None = None,
-    model: str | None = None,
-    temperature: float | None = None,
-    max_tokens: int | None = None,
-    api_key: str | None = None,
 ) -> None:
-    """Initialize a new specification project at PATH."""
+    """Initialize a new specification project at PATH.
+
+    Interactive mode asks about LLM provider, API key, error reporting,
+    and web UI.  On re-init, existing values are shown as defaults.
+
+    \b
+    Interactive:  spec-editor init
+    Non-interactive: spec-editor init --non-interactive
+    """
     project_path = Path(path).resolve()
+    is_reinit = _check_project_initialized(project_path)
 
-    # Create directory if it doesn't exist.
-    project_path.mkdir(parents=True, exist_ok=True)
+    if is_reinit:
+        console.print(f"\n[bold cyan]Re-initializing existing project:[/bold cyan] {project_path}")
+    else:
+        console.print(f"\n[bold green]Creating new project:[/bold green] {project_path}")
 
+    # ── Pre-flight checks ──
     method_path = _BUILTIN_METHODOLOGIES / f"{methodology}.yaml"
     if not method_path.exists():
         available = [p.stem for p in _BUILTIN_METHODOLOGIES.glob("*.yaml")]
-        console.print(
-            f"[red]Error:[/red] methodology '{methodology}' not found. "
-            f"Available: {', '.join(available)}"
-        )
+        console.print(f"[red]Methodology '{methodology}' not found.[/red] Available: {', '.join(available)}")
         raise SystemExit(1)
 
+    # ── Interactive questions ──
+    existing = _read_existing_config(project_path) if is_reinit else {}
+
+    if non_interactive:
+        provider = existing.get("agent_1_provider", DEFAULT_PROVIDER)
+        model = existing.get("agent_1_model", DEFAULT_REASONING_MODEL)
+        chat_model = existing.get("agent_2_model", DEFAULT_CHAT_MODEL)
+        api_key = ""
+        report_errors = existing.get("report_errors", True)
+        use_web_ui = existing.get("use_web_ui", False)
+    else:
+        console.print("\n[bold]LLM Configuration[/bold]")
+        provider = click.prompt(
+            "  Provider",
+            type=click.Choice(list(ALL_PROVIDERS)),
+            default=existing.get("agent_1_provider", DEFAULT_PROVIDER),
+        )
+        model = click.prompt(
+            "  Reasoning model",
+            default=existing.get("agent_1_model", DEFAULT_REASONING_MODEL),
+        )
+        chat_model = click.prompt(
+            "  Chat model (for simpler tasks)",
+            default=existing.get("agent_2_model", DEFAULT_CHAT_MODEL),
+        )
+        api_key = click.prompt(
+            "  API key",
+            default="",
+            hide_input=True,
+            show_default=False,
+        ) or ""
+
+        console.print("\n[bold]Error Reporting[/bold]")
+        report_errors = click.confirm(
+            "  Report stack traces on errors?",
+            default=existing.get("report_errors", True),
+        )
+
+        console.print("\n[bold]Web Interface[/bold]")
+        docker_available = _check_docker()
+        if not docker_available:
+            console.print("  [yellow]Docker not detected — web UI unavailable[/yellow]")
+            use_web_ui = False
+        else:
+            use_web_ui = click.confirm(
+                "  Start web UI locally (requires Docker)?",
+                default=existing.get("use_web_ui", False),
+            )
+
+    # ── Create directory structure ──
+    project_path.mkdir(parents=True, exist_ok=True)
+    aspects_dir = project_path / "aspects"
+    aspects_dir.mkdir(exist_ok=True)
+    for d in ["source", "sources_raw", "logs", "tests"]:
+        (project_path / d).mkdir(exist_ok=True)
+
+    # ── Copy methodology + skills + workflows ──
     try:
         method = load_methodology(method_path)
     except Exception as exc:
         console.print(f"[red]Error loading methodology:[/red] {exc}")
         raise SystemExit(1)
 
-    aspects_dir = project_path / "aspects"
-    aspects_dir.mkdir(exist_ok=True)
-
-    source_dir = project_path / "source"
-    source_dir.mkdir(exist_ok=True)
-
-    sources_raw_dir = project_path / "sources_raw"
-    sources_raw_dir.mkdir(exist_ok=True)
-
-    readme_path = source_dir / "readme.md"
-    readme_path.write_text(
-        _EXAMPLE_TEMPLATE if with_example else _README_TEMPLATE, encoding="utf-8"
-    )
-
     shutil.copy(method_path, project_path / "methodology.yaml")
 
-    # Copy skills.yaml from data/ to project root
+    # ── Seed example source document ──
+    if with_example:
+        example = (project_path / "source" / "readme.md")
+        example.write_text(_EXAMPLE_TEMPLATE, encoding="utf-8")
+        console.print("  [green]✓[/green] Example requirements document added to source/")
+
     skills_path = _BUILTIN_METHODOLOGIES.parent / "skills.yaml"
     if skills_path.exists():
         shutil.copy(skills_path, project_path / "skills.yaml")
 
-    # Copy skills/ directory if present
     skills_dir = _BUILTIN_METHODOLOGIES.parent.parent / "skills"
     if skills_dir.is_dir():
         dest = project_path / "skills"
@@ -110,7 +228,6 @@ def init(
             shutil.rmtree(dest)
         shutil.copytree(skills_dir, dest)
 
-    # Copy workflows/ directory if present
     workflows_dir = _BUILTIN_METHODOLOGIES.parent.parent / "workflows"
     if workflows_dir.is_dir():
         dest = project_path / "workflows"
@@ -118,55 +235,34 @@ def init(
             shutil.rmtree(dest)
         shutil.copytree(workflows_dir, dest)
 
+    # ── Write agents.yaml ──
     agents_config = _create_default_agents_config()
-    if agents:
-        try:
-            agents_config = AgentsConfig.from_yaml(Path(agents))
-        except Exception as exc:
-            console.print(f"[yellow]Warning:[/yellow] failed to load {agents}: {exc}")
-            console.print("Using default configuration.")
-
-    # Override with CLI options if provided
-    overrides: dict[str, Any] = {}
-    if provider is not None:
-        overrides["provider"] = provider
-    if model is not None:
-        overrides["model"] = model
-    if temperature is not None:
-        overrides["temperature"] = temperature
-    if max_tokens is not None:
-        overrides["max_tokens"] = max_tokens
-    if overrides:
-        for agent_name in ("agent_1", "agent_2", "orchestrator"):
-            agent = getattr(agents_config, agent_name)
-            for k, v in overrides.items():
-                setattr(agent, k, v)
-
-    # API key: write to .env file if provided
-    if api_key:
-        env_path = project_path / ".env"
-        env_path.write_text(f"LLM_API_KEY={api_key}\n", encoding="utf-8")
-        console.print(f"[green]API key saved to {env_path}[/green]")
+    agents_config.agent_1.provider = provider
+    agents_config.agent_1.model = model
+    agents_config.agent_2.model = chat_model
 
     agents_yaml = {
-        "agents": {
-            "agent_1": agents_config.agent_1.model_dump(),
-            "agent_2": agents_config.agent_2.model_dump(),
-            "orchestrator": agents_config.orchestrator.model_dump(),
+        CONFIG_KEY_AGENTS: {
+            AGENT_1: agents_config.agent_1.model_dump(),
+            AGENT_2: agents_config.agent_2.model_dump(),
+            ORCHESTRATOR: agents_config.orchestrator.model_dump(),
         },
-        "max_rounds": agents_config.max_rounds,
-        "max_time_minutes": agents_config.max_time_minutes,
+        CONFIG_KEY_MAX_ROUNDS: agents_config.max_rounds,
+        CONFIG_KEY_MAX_TIME_MINUTES: agents_config.max_time_minutes,
     }
     with open(project_path / "agents.yaml", "w", encoding="utf-8") as f:
-        yaml.dump(
-            agents_yaml,
-            f,
-            allow_unicode=True,
-            default_flow_style=False,
-            sort_keys=False,
-        )
+        yaml.dump(agents_yaml, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
 
-    # Create or update local.yaml — preserve existing fields on re-init
+    # ── Write .env with API key ──
+    if api_key:
+        env_var = PROVIDER_ENV_VARS.get(provider, "LLM_API_KEY")
+        env_path = project_path / ".env"
+        existing_env = env_path.read_text() if env_path.exists() else ""
+        if env_var not in existing_env:
+            with open(env_path, "a") as f:
+                f.write(f"{env_var}={api_key}\n")
+
+    # ── Write local.yaml ──
     local_yaml_path = project_path / "local.yaml"
     existing_local: dict[str, Any] = {}
     if local_yaml_path.exists():
@@ -175,40 +271,46 @@ def init(
         except Exception:
             pass
     existing_local["project_path"] = str(project_path)
-    existing_local.setdefault("queue_url", "redis://localhost:6379")
+    existing_local.setdefault("queue_url", DEFAULT_REDIS_URL)
+    existing_local["report_errors"] = report_errors
+    existing_local["use_web_ui"] = use_web_ui
     with open(local_yaml_path, "w", encoding="utf-8") as f:
         yaml.dump(existing_local, f, allow_unicode=True, default_flow_style=False)
 
-    # ── Implementation Framework: scaffold directories + architecture tests ──
+    # ── Scaffold implementation directories ──
     try:
         from src.implementation.engine import ImplementationEngine
-
         impl_engine = ImplementationEngine(str(project_path))
-        scaffold_result = impl_engine.initialize_project()
-        dirs = scaffold_result.get("dirs_created", [])
-        files = scaffold_result.get("files_written", [])
-        if dirs:
-            console.print(f"  [dim]Scaffolded {len(dirs)} directories from pattern[/dim]")
-        if files:
-            console.print(f"  [dim]Generated {len(files)} architecture file(s)[/dim]")
-    except Exception as exc:
-        console.print(f"[yellow]Warning:[/yellow] implementation scaffolding skipped: {exc}")
+        impl_engine.initialize_project()
+    except Exception:
+        pass
 
     # ── Config validation ──
     _validate_project_config(project_path, existing_local)
 
-    console.print(f"[green]Project created:[/green] {project_path}")
+    # ── Post-init summary ──
+    console.print(f"\n[bold green]Project initialized:[/bold green] {project_path}")
     console.print(f"  Methodology: {method.name} v{method.version}")
-    console.print(f"  Aspects: {len(method.aspects)}")
-    console.print(
-        f"  Agents: {agents_config.agent_1.model} / {agents_config.agent_2.model}"
-    )
-    console.print(f"  Orchestrator: {agents_config.orchestrator.model}")
-    if with_example:
-        console.print(f"\n  [green]Example source document ready![/green]")
-        console.print(f"  Next: cd {project_path} && spec-editor run")
-    else:
-        console.print(f"\n  Next: cd {project_path} && spec-editor run")
+    console.print(f"  Reasoning:   {provider} / {model}")
+    console.print(f"  Chat:        {provider} / {chat_model}")
+    console.print(f"  Error reports: {'Yes' if report_errors else 'No'}")
+
+    # Available paths
+    table = Table(title="Available paths")
+    table.add_column("Option", style="cyan")
+    table.add_column("Command", style="white")
+    table.add_column("Description", style="dim")
+
+    table.add_row("A) CLI", f"cd {path} && spec-editor run", "Run the full cycle pipeline")
+    table.add_row("B) VSCode", "Install spec-editor extension", "GUI with diagrams, tree, validation")
+    table.add_row("C) Web UI", "http://localhost:3000", "Browser-based interface") if use_web_ui else None
+    table.add_row("Analyze", f"spec-editor analyze -t \"...\"", "Quick requirement analysis")
+    table.add_row("Status", f"spec-editor status", "View project state")
+    console.print(table)
+
+    if not is_reinit:
+        console.print("\n[bold]Quick start:[/bold]")
+        console.print(f"  cd {path} && spec-editor run")
 
 
 def _create_default_agents_config() -> AgentsConfig:
