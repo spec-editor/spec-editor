@@ -7,6 +7,8 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-blue.svg" alt="Apache 2.0"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+"></a>
   <a href="tests/"><img src="https://img.shields.io/badge/tests-340+-green.svg" alt="340+ tests"></a>
+  <a href="#vs-code-extension"><img src="https://img.shields.io/badge/VS_Code-extension-blue.svg" alt="VS Code extension"></a>
+  <a href="#web-ui"><img src="https://img.shields.io/badge/Web_UI-included-green.svg" alt="Web UI"></a>
 </p>
 
 <p align="center">
@@ -18,19 +20,24 @@
 ## What is Spec Editor?
 
 Spec Editor turns messy requirements documents into structured specifications
-using multiple AI agents in a structured dialogue. Then it connects to your
-AI coding agent (Claude Code, Cursor, Zed) via MCP so your generated code
-stays aligned with your requirements.
+using multiple AI agents in a structured dialogue. It's built around a **pluggable
+methodology system** — define any set of aspects (for ex. modules, scenarios, UI,
+entities, NFRs), their relationships, and the agent skills that populate them. Then it
+connects to your AI coding agent (Claude Code, Cursor, Zed) via MCP so your
+generated code stays aligned with your requirements.
 
 **It is:**
 - A CLI tool that generates specifications via multi-agent debate
+- A methodology engine — define your own aspects, relationships, and agent skills in YAML
+- An architectural code generator — produces structured code from patterns (hexagonal, DDD, MVC)
 - An MCP server so external AI agents can read your specification
-- A code generator that creates skeletons from spec elements (SQLAlchemy, FastAPI, React, pytest)
+- A VS Code extension with tree view, validation panel, and Mermaid diagrams
+- A local web UI for browsing specifications without touching a terminal
 
 **It is NOT:**
-- A generic code generator (we do templates, not AI code gen)
 - A task tracker (use Jira/Linear for that — we export to them)
 - A replacement for developers (agents debate, humans decide)
+- A one-size-fits-all template — methodologies are pluggable, not hardcoded
 
 > [!NOTE]
 > Spec Editor works with any OpenAI-compatible API (DeepSeek, OpenAI, Anthropic).
@@ -45,7 +52,7 @@ stays aligned with your requirements.
 - **Engineering teams** — need traceability from requirements to deployed code
 - **Technical PMs** — tired of Word docs and Jira tickets drifting apart over time
 - **AI-assisted developers** — using Cursor, Claude Code, or Zed — give your coding agent full spec context
-- **Startups** — need structured requirements without hiring a dedicated systems analyst
+- **Vibe-coders** — gives you a secret sauce of technical architecture and professional-grade requirements
 
 ---
 
@@ -144,14 +151,55 @@ Add to your agent's MCP config (`.mcp.json`):
 | Tool | Description |
 |------|-------------|
 | `get_context_for_file` | Spec context for a code file via `@implements` |
-| `search_elements` | Full-text search across requirements |
+| `search_elements` | Full-text and semantic search across requirements |
 | `read_element` | Read any specification element by ID |
 | `list_all_elements` | Browse entire specification |
 
 Add `@implements("REQ-ID")` decorators to your code — the agent
-automatically pulls linked requirements into its context.
+automatically pulls linked requirements into its context. This gives
+AI coding assistants supercharged debugging: they see not just your code,
+but the exact requirements it was built to satisfy. Bugs get traced
+back to spec elements instantly.
 
 Full API reference: [readme_mcp.md](readme_mcp.md)
+
+---
+
+## VS Code Extension
+
+Install from the `.vsix` file included in the repository:
+
+```bash
+code --install-extension packages/vscode-extension/spec-editor-vscode-0.1.0.vsix
+```
+
+**What you get:**
+- **Tree view** — browse aspects and all spec elements
+- **Validation panel** — see errors and warnings inline as you work
+- **Mermaid diagrams** — visualize relationships between elements
+
+The extension automatically connects to the MCP server started by `spec-editor mcp`.
+
+---
+
+## Web UI (Experimental)
+
+Launch a browser-based interface to explore your specification visually:
+
+```bash
+cd packages/frontend/out
+python3 -m http.server 3000
+# Open http://localhost:3000
+```
+
+Or with Docker (configured during `spec-editor init`):
+
+```bash
+docker compose up -d
+```
+
+Ideal for team reviews, stakeholder walkthroughs, and non-technical users.
+A web-cloud version is coming!
 
 ---
 
@@ -204,6 +252,12 @@ Full API reference: [readme_mcp.md](readme_mcp.md)
 │  │     AI CODING AGENTS                  │                    │
 │  │  Claude Code · Cursor · Zed · ...    │                    │
 │  │  Code with full spec context          │                    │
+│  └──────────────────┬───────────────────┘                    │
+│                     ▼                                        │
+│  ┌──────────────────────────────────────┐                    │
+│  │    VS CODE EXTENSION + WEB UI        │                    │
+│  │  Tree view · Diagrams · Validation   │                    │
+│  │  Browser UI for non-technical users  │                    │
 │  └──────────────────────────────────────┘                    │
 └──────────────────────────────────────────────────────────────┘
 
@@ -214,29 +268,45 @@ Full API reference: [readme_mcp.md](readme_mcp.md)
 | Feature | Description |
 |---------|-------------|
 | **Multi-agent dialogue** | 2 agents + orchestrator debate requirements in structured rounds |
+| **Pluggable methodologies** | Define any set of aspects, relationships, and agent skills in YAML — not locked into one framework |
 | **Skill-based helpers** | Agents spawn specialised helpers: scenario decomposer, UI navigator, metrics linker |
-| **Methodology-driven** | Waterfall decomposes into 8 aspects: modules, scenarios, UI, data, NFR, metrics, implementation, sources |
+| **Architectural codegen** | Generates code following patterns: hexagonal, DDD, clean architecture, MVC |
 | **MCP server** | 20+ tools — connect to Claude Code, Cursor, Zed for context-aware code generation |
 | **Export formats** | SRS (IEEE 830), TRLC (BMW), OpenAPI 3.0, Jira CSV, styled HTML |
 | **Git-native** | Everything is Markdown + YAML in git — version, diff, merge, blame |
+| **Pluggable subsystems** | Swappable backends for ingestion, visualization, storage, secrets, events, auth, and notifications |
 
 ---
 
 ## Supported Methodologies
 
-Specifications follow a methodology — a YAML-defined structure of aspects,
-element types, and relationships.
+Specifications follow a **methodology** — a YAML-defined structure of aspects,
+element types, cross-aspect relationships, and agent skills. Create your own
+or use the built-in ones:
 
 | Methodology | What it generates | Status |
 |-------------|-------------------|--------|
-| **waterfall** | Full spec: modules, scenarios, UI, data, non-functional, implementation, metrics, sources | ✅ Free (OSS) |
-| **agile** | Sprint backlog: epics → user stories → acceptance criteria + Jira CSV | ✅ Paid |
-| **scrum** | Agile + sprints (goal, capacity, focus factor, velocity, DoD) | ✅ Paid |
-| **kanban** | Agile + workflow stages (WIP limits, cycle time, throughput) | ✅ Paid |
-| **api-first** | OpenAPI 3.0 contract (service → endpoint → schema + auth) | ✅ Paid |
+| **waterfall** | Full spec: modules, scenarios, UI, entities, non-functional, implementation, metrics, sources | ✅ Bundled |
+| **agile** | Sprint backlog: epics → user stories → acceptance criteria + Jira CSV | 🔜 Coming |
+| **scrum** | Agile + sprints (goal, capacity, focus factor, velocity, DoD) | 🔜 Coming |
+| **kanban** | Agile + workflow stages (WIP limits, cycle time, throughput) | 🔜 Coming |
+| **api-first** | OpenAPI 3.0 contract (service → endpoint → schema + auth) | 🔜 Coming |
 
-> `waterfall` is free and bundled with the OSS release.
-> Agile, scrum, kanban, and api-first are Methodology Packs (coming soon).
+Create your own methodology in YAML — define aspects, element types,
+cross-aspect relationships, and agent skills. See `data/methodology.yaml`
+for the waterfall example.
+
+### Reverse Engineering
+
+Already have code but no spec? Use `reengineer` mode to extract requirements
+from an existing codebase:
+
+```bash
+spec-editor reengineer ./my-codebase   # reads @implements, docstrings, types
+spec-editor run                        # agents fill in the gaps
+```
+
+Supported languages: Python, TypeScript, JavaScript, Go, Java, Kotlin, Rust.
 
 ---
 
@@ -252,27 +322,6 @@ spec-editor status -p ./my-project       # Show spec status
 spec-editor export -p ./my-project       # Export to SRS/TRLC/OpenAPI/Jira/HTML
 spec-editor mcp                          # Start MCP server (20+ tools)
 ```
-
----
-
-## Export Formats
-
-```bash
-spec-editor export -p .                            # SRS document (default)
-spec-editor export -p . -f html -o spec.html       # Styled HTML with relationships
-spec-editor export -p . -f trlc -o spec.trlc       # TRLC (BMW-compatible)
-spec-editor export -p . -f openapi -o api.yaml     # OpenAPI 3.0
-spec-editor export -p . -f jira -o backlog.csv     # Jira CSV import
-```
-
-| Format | CLI flag | Output | Use case |
-|--------|----------|--------|----------|
-| **SRS (IEEE 830)** | `-f srs` (default) | Markdown | Stakeholder-ready specification |
-| **HTML** | `-f html` | `spec.html` | Styled report with relationship traces |
-| **TRLC** (BMW) | `-f trlc` | `.trlc` file | Requirements as code |
-| **OpenAPI 3.0** | `-f openapi` | `openapi.yaml` | API contracts from api-first |
-| **Jira CSV** | `-f jira` | `.csv` file | Sprint backlog for Jira import |
-| **Markdown + YAML** | Native (git) | `aspects/*.md` | Git-native — version, diff, merge |
 
 ---
 
@@ -295,6 +344,10 @@ agents:
     model: deepseek/deepseek-reasoner
 ```
 
+More configuration options are available through the VS Code extension:
+`Ctrl+Shift+P` → type `Spec Editor` to access settings, project switching,
+and MCP controls.
+
 ---
 
 ## Contributing
@@ -314,6 +367,7 @@ Got ideas? **Open an issue** or **submit a PR** — we review everything.
 - [Quickstart](docs/QUICKSTART.md) — 5-minute setup
 - [Architecture](docs/ARCHITECTURE.md) — pipeline, components, CLI reference
 - [MCP API Reference](readme_mcp.md) — MCP server tools
+- [Extension Integration](docs/EXTENSION_INTEGRATION.md) — VS Code + MCP setup
 - [Contributing Prompts](docs/CONTRIBUTING_PROMPTS.md) — how to improve agent quality
 - [CONTRIBUTING.md](CONTRIBUTING.md) — code contributions
 - [CHANGELOG.md](CHANGELOG.md) — release history
@@ -323,6 +377,3 @@ Got ideas? **Open an issue** or **submit a PR** — we review everything.
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
-
-The core engine (`spec-editor`) is free and open source.
-Methodology Packs are source-available, purchased separately.
