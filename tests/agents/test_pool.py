@@ -78,9 +78,9 @@ class TestAgentPool:
             make_loop=_fake_make_loop,
         )
 
-        await pool.spawn("m1", "task1")  # OK — теперь 2 агента
+        await pool.spawn("m1", "task1")  # OK — 2 agents now
         with pytest.raises(RuntimeError, match="limit"):
-            await pool.spawn("m2", "task2")  # отказ — лимит 2
+            await pool.spawn("m2", "task2")  # rejected — limit 2
 
     @pytest.mark.asyncio
     async def test_pool_cleans_finished_tasks(self):

@@ -35,9 +35,9 @@ class TestQuestionList:
         """list_open() returns only open questions."""
         with tempfile.TemporaryDirectory() as tmp:
             ql = QuestionList(Path(tmp))
-            ql.ask("Agent 1", "Вопрос 1")
-            ql.ask("Agent 2", "Вопрос 2")
-            ql.answer("Q-0001", "Ответ 1")
+            ql.ask("Agent 1", "Question 1")
+            ql.ask("Agent 2", "Question 2")
+            ql.answer("Q-0001", "Answer 1")
 
             open_qs = ql.list_open()
             assert len(open_qs) == 1
@@ -47,12 +47,12 @@ class TestQuestionList:
         """answer() changes status to answered and records the answer."""
         with tempfile.TemporaryDirectory() as tmp:
             ql = QuestionList(Path(tmp))
-            ql.ask("Agent 1", "Вопрос")
-            q = ql.answer("Q-0001", "Мой ответ")
+            ql.ask("Agent 1", "Question")
+            q = ql.answer("Q-0001", "My answer")
 
             assert q is not None
             assert q.status == "answered"
-            assert q.answer == "Мой ответ"
+            assert q.answer == "My answer"
 
             # Verify in the file
             all_qs = ql._all()
@@ -62,16 +62,16 @@ class TestQuestionList:
         """answer() for nonexistent ID returns None."""
         with tempfile.TemporaryDirectory() as tmp:
             ql = QuestionList(Path(tmp))
-            q = ql.answer("Q-9999", "ответ")
+            q = ql.answer("Q-9999", "answer")
             assert q is None
 
     def test_answer_already_answered(self):
         """answer() for already-answered question returns None."""
         with tempfile.TemporaryDirectory() as tmp:
             ql = QuestionList(Path(tmp))
-            ql.ask("Agent 1", "Вопрос")
-            ql.answer("Q-0001", "Первый ответ")
-            q = ql.answer("Q-0001", "Второй ответ")
+            ql.ask("Agent 1", "Question")
+            ql.answer("Q-0001", "First answer")
+            q = ql.answer("Q-0001", "Second answer")
             assert q is None
 
     def test_multiple_questions_increment_ids(self):

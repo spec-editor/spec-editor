@@ -44,4 +44,4 @@ class TestAgentRole:
         """If the skill doesn't specify tools — all are available."""
         skill = Skill(name="full", prompt="", tools=[])
         role = AgentRole.from_skill(skill, writable=True)
-        assert role._allowed_tools is None  # None = все
+        assert role._allowed_tools is None  # None = all

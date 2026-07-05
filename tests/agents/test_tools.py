@@ -52,7 +52,7 @@ class TestToolRegistry:
         """New code verification tools are registered in RO."""
         ro_names = {t.name for t in get_tool_definitions(writable=False)}
         required = {"verify_implements", "verify_traceability", "annotate_code"}
-        assert required.issubset(ro_names), f"Нет: {required - ro_names}"
+        assert required.issubset(ro_names), f"Missing: {required - ro_names}"
 
     def test_code_verification_tools_not_in_write(self):
         """Verification tools are read-only only."""
@@ -61,7 +61,7 @@ class TestToolRegistry:
         rw_names = {t.name for t in all_tools} - {t.name for t in ro_tools}
         code_tools = {"verify_implements", "verify_traceability", "annotate_code"}
         for name in code_tools:
-            assert name not in rw_names, f"{name} не должен быть write-only"
+            assert name not in rw_names, f"{name} should not be write-only"
 
     def test_verify_implements_schema_has_required_params(self):
         """verify_implements requires code_dir and file_path."""
@@ -88,10 +88,10 @@ class TestToolRegistry:
 
         for tool in get_tool_definitions(writable=True):
             params = tool.parameters
-            assert "type" in params, f"{tool.name}: нет type"
+            assert "type" in params, f"{tool.name}: missing type"
             assert params["type"] == "object", f"{tool.name}: type != object"
             if "required" in params:
                 for req in params["required"]:
                     assert req in params.get("properties", {}), (
-                        f"{tool.name}: required '{req}' не в properties"
+                        f"{tool.name}: required '{req}' not in properties"
                     )
