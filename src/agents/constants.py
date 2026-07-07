@@ -4,6 +4,18 @@ All hardcoded values that appear in multiple files live here.
 Single source of truth — no duplication across agent modules.
 """
 
+from pathlib import Path
+
+# ──────────────────────────────────────────────────────────────────
+# Version — single source of truth (reads VERSION file)
+# ──────────────────────────────────────────────────────────────────
+
+_VERSION_PATH = Path(__file__).resolve().parent.parent.parent / "VERSION"
+try:
+    __version__ = _VERSION_PATH.read_text().strip()
+except (OSError, FileNotFoundError):
+    __version__ = "0.1.0"
+
 # ──────────────────────────────────────────────────────────────────
 # Agent role identifiers
 # ──────────────────────────────────────────────────────────────────
@@ -94,3 +106,73 @@ QUEUE_REFACTOR = "refactor"
 
 PROACTIVE_SCAN_INTERVAL = 60     # PM + AM scan interval
 PROACTIVE_SCAN_START_DELAY = 10  # initial delay before first scan
+
+# ──────────────────────────────────────────────────────────────────
+# Infrastructure defaults
+# ──────────────────────────────────────────────────────────────────
+
+DEFAULT_REDIS_URL = "redis://localhost:6379"
+DEFAULT_NATS_URL = "nats://localhost:4222"
+DEFAULT_SMTP_HOST = "localhost"
+DEFAULT_SMTP_FROM = "spec-editor@localhost"
+DEFAULT_HTTP_API_URL = "http://localhost:8080"
+
+# ──────────────────────────────────────────────────────────────────
+# LLM provider defaults
+# ──────────────────────────────────────────────────────────────────
+
+DEFAULT_PROVIDER = "deepseek"
+ALL_PROVIDERS: tuple[str, ...] = ("deepseek", "openai", "anthropic", "google", "groq", "ollama")
+
+PROVIDER_ENV_VARS: dict[str, str] = {
+    "deepseek": "DEEPSEEK_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "google": "GOOGLE_API_KEY",
+}
+
+# ──────────────────────────────────────────────────────────────────
+# Agent config keys (used in agents.yaml serialisation)
+# ──────────────────────────────────────────────────────────────────
+
+AGENT_1 = "agent_1"
+AGENT_2 = "agent_2"
+ORCHESTRATOR = "orchestrator"
+CONFIG_KEY_AGENTS = "agents"
+CONFIG_KEY_MAX_ROUNDS = "max_rounds"
+CONFIG_KEY_MAX_TIME_MINUTES = "max_time_minutes"
+
+# ──────────────────────────────────────────────────────────────────
+# Methodology
+# ──────────────────────────────────────────────────────────────────
+
+DEFAULT_METHODOLOGY = "waterfall"
+
+# ──────────────────────────────────────────────────────────────────
+# Aspect identifiers
+# ──────────────────────────────────────────────────────────────────
+
+ASPECT_MODULES = "modules"
+ASPECT_USER_SCENARIOS = "user_scenarios"
+ASPECT_USER_INTERFACE = "user_interface"
+ASPECT_DATA_ENTITIES = "data_entities"
+ASPECT_NON_FUNCTIONAL = "non_functional"
+ASPECT_IMPLEMENTATION = "implementation"
+ASPECT_METRICS = "metrics"
+ASPECT_SOURCES = "sources"
+
+ALL_ASPECTS: tuple[str, ...] = (
+    ASPECT_MODULES,
+    ASPECT_USER_SCENARIOS,
+    ASPECT_USER_INTERFACE,
+    ASPECT_DATA_ENTITIES,
+    ASPECT_NON_FUNCTIONAL,
+    ASPECT_IMPLEMENTATION,
+    ASPECT_METRICS,
+)
+
+# ──────────────────────────────────────────────────────────────────
+# Timeouts (seconds)
+# ──────────────────────────────────────────────────────────────────
+
+ARCH_CHECK_TIMEOUT = 60

@@ -2,6 +2,7 @@
 
 import asyncio
 from pathlib import Path
+from typing import Any
 
 import click
 from dotenv import load_dotenv
@@ -25,6 +26,331 @@ console = Console()
 logger = get_logger(__name__)
 
 cli = commands_cli
+
+
+async def _sync_channels(project_path: Path, direction: str = "in") -> None:
+    """Pull from / push to external channels (Planka, Jira, Trello, etc.).
+
+    Called before and after each run.  Reads channel config from
+    ``local.yaml`` → ``channels:`` section.
+
+    Uses ``print()`` (not ``console.print()``) so output is captured
+    by the ``_TeeWriter`` that mirrors stdout to the run log file.
+    """
+    local_yaml = project_path / "local.yaml"
+    if not local_yaml.exists():
+        return
+
+    try:
+        import yaml
+        config_data = yaml.safe_load(local_yaml.read_text()) or {}
+        channels_list = config_data.get("channels", [])
+    except Exception:
+        return
+
+    if not channels_list:
+        return
+
+    from src.channels import create_channel
+    from src.channels.models import ChannelConfig
+
+    label = "PULL" if direction == "in" else "PUSH"
+    synced = 0
+    errors: list[str] = []
+
+    for raw in channels_list:
+        if not raw.get("enabled", True):
+            continue
+
+        channel_type = raw.get("type", "unknown")
+        channel_name = raw.get("name", "")
+        channel_id = f"{channel_type}:{channel_name}" if channel_name else channel_type
+
+        try:
+            cfg = ChannelConfig(**raw)
+            channel = create_channel(cfg)
+            if channel is None:
+                continue
+
+            if direction == "in":
+                # PULL: Planka cards → spec-editor elements
+                created, updated = await _pull_cards_to_elements(
+                    project_path, channel, cfg, channel_id
+                )
+                if created or updated:
+                    print(
+                        f"[ch:{channel_id}] PULL: {created} new, {updated} updated"
+                    )
+                synced += 1
+            else:
+                # PUSH: spec-editor elements → Planka cards
+                created, updated = await _push_elements_to_cards(
+                    project_path, channel, cfg, channel_id
+                )
+                if created or updated:
+                    print(
+                        f"[ch:{channel_id}] PUSH: {created} new, {updated} updated"
+                    )
+                synced += 1
+
+        except Exception as exc:
+            errors.append(f"{channel_id}: {exc}")
+
+    if synced > 0 and not errors:
+        print(f"Channels {label}: {synced} synced")
+    elif errors:
+        print(f"Channel {label} errors: {'; '.join(errors[:3])}")
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Bidirectional sync helpers
+# ═══════════════════════════════════════════════════════════════════
+
+_TRACKER_ID_KEY = "_tracker_ids"  # element metadata: {channel_type: card_id}
+
+def _get_tracker_id(el: Any, channel_id: str) -> str:
+    """Extract Planka card ID from element tags (format: tracker:{channel}:{id})."""
+    prefix = f"tracker:{channel_id}:"
+    for tag in (el.tags or []):
+        if tag.startswith(prefix):
+            return tag[len(prefix):]
+    return ""
+
+def _set_tracker_id(storage: Any, el_id: str, channel_id: str, card_id: str) -> None:
+    """Store Planka card ID as a tag on the element."""
+    el = storage.read_element(el_id)
+    prefix = f"tracker:{channel_id}:"
+    new_tags = [t for t in (el.tags or []) if not t.startswith(prefix)]
+    new_tags.append(f"{prefix}{card_id}")
+    el.tags = new_tags
+    storage.write_element(el)
+
+
+async def _pull_cards_to_elements(
+    project_path: Path,
+    channel: Any,
+    cfg: Any,
+    channel_id: str,
+) -> tuple[int, int]:
+    """Pull Planka cards → create/update spec-editor elements.
+
+    - New cards → create DRAFT SRC elements
+    - Existing cards newer than element → update element title/status
+    - Stores card ID in element metadata for dedup.
+
+    Returns (created, updated) counts.
+    """
+    if cfg.kind.value != "tracker":
+        return 0, 0
+
+    cards = await channel.pull()
+    if not cards:
+        return 0, 0
+
+    from src.storage.filesystem import FilesystemStorage
+    from src.storage.models import Element, ElementStatus
+    import frontmatter
+
+    storage: FilesystemStorage = FilesystemStorage(project_path)
+    all_elements = storage.list_all()
+    el_by_tracker_id: dict[str, Any] = {}
+    for el in all_elements:
+        cid = _get_tracker_id(el, channel_id)
+        if cid:
+            el_by_tracker_id[cid] = el
+
+    status_map = cfg.mapping.get("status", {})  # lane_name → element_status
+    created = 0
+    updated = 0
+
+    for card in cards:
+        card_id = card.id
+        card_title = card.title
+        card_status = card.status  # lane name
+
+        if card_id in el_by_tracker_id:
+            # Card already linked — check if newer
+            existing = el_by_tracker_id[card_id]
+            el_mtime = _get_element_mtime(project_path, existing.id)
+            card_mtime = _parse_planka_time(card.raw.get("updatedAt", ""))
+
+            if card_mtime and el_mtime and card_mtime > el_mtime:
+                # Card is newer — update element
+                new_status = status_map.get(card_status, "draft")
+                full_el = storage.read_element(existing.id)
+                full_el.title = card_title
+                full_el.status = ElementStatus(new_status)
+                storage.write_element(full_el)
+                updated += 1
+        else:
+            # New card — create SRC element
+            new_status = status_map.get(card_status, "draft")
+            el_id = f"SRC-PL-{card_id[-8:]}"  # short unique ID
+            content = card.description or card_title
+            storage.write_element(
+                Element(
+                    id=el_id,
+                    aspect="sources",
+                    element_type="source",
+                    title=card_title,
+                    content=content,
+                    status=ElementStatus(new_status),
+                    tags=[f"tracker:{channel_id}:{card_id}"],
+                )
+            )
+            created += 1
+
+    return created, updated
+
+
+async def _push_elements_to_cards(
+    project_path: Path,
+    channel: Any,
+    cfg: Any,
+    channel_id: str,
+) -> tuple[int, int]:
+    """Push spec-editor elements → create/update Planka cards.
+
+    - Elements without linked card → create in Backlog lane
+    - Elements newer than linked card → update card title/lane
+    - Compares mtime for conflict resolution.
+
+    Returns (created, updated) counts.
+    """
+    if cfg.kind.value != "tracker":
+        return 0, 0
+
+    from src.storage.filesystem import FilesystemStorage
+
+    storage: FilesystemStorage = FilesystemStorage(project_path)
+    elements = storage.list_all()
+    if not elements:
+        return 0, 0
+
+    # Get existing cards for dedup
+    cards = await channel.pull()
+    card_by_title = {c.title.lower(): c for c in cards if c.title}
+
+    status_map = cfg.mapping.get("status", {})
+    reverse_map = {v: k for k, v in status_map.items()}  # element_status → lane
+
+    token = cfg.config.get("token", "")
+    board_id = cfg.config.get("board_id", "")
+    url = cfg.config.get("url", "").rstrip("/")
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+    import aiohttp
+
+    # Pre-fetch lanes for efficiency
+    lane_by_name: dict[str, str] = {}
+    async with aiohttp.ClientSession() as s:
+        board_url = f"{url}/api/boards/{board_id}?with=lists"
+        async with s.get(board_url, headers=headers) as r:
+            if r.status == 200:
+                data = await r.json()
+                for lst in data.get("included", {}).get("lists", []):
+                    name = lst.get("name", "")
+                    if name:
+                        lane_by_name[name.lower()] = lst["id"]
+
+    created = 0
+    updated = 0
+
+    for el in elements[:50]:
+        el_title = el.title or el.id
+        el_status = (el.status.value if hasattr(el.status, "value") else str(el.status)) if el.status else "draft"
+        linked_card_id = _get_tracker_id(el, channel_id)
+
+        # Find matching card: by linked ID first, then by title
+        card = None
+        if linked_card_id:
+            for c in cards:
+                if c.id == linked_card_id:
+                    card = c
+                    break
+        if card is None:
+            card = card_by_title.get(el_title.lower())
+
+        if card:
+            # Card exists — update if element is newer
+            el_mtime = _get_element_mtime(project_path, el.id)
+            card_mtime = _parse_planka_time(card.raw.get("updatedAt", ""))
+
+            if (not card_mtime) or (el_mtime and el_mtime > card_mtime):
+                target_lane = reverse_map.get(el_status, "")
+                lane_id = lane_by_name.get((target_lane or "").lower(), "") if target_lane else ""
+                el_content = getattr(el, "content", "") or ""
+                desc = f"**{el.id}** | {el.aspect} | {el_status}\n\n{el_content[:500]}"
+                if lane_id and card.status != target_lane:
+                    async with aiohttp.ClientSession() as s2:
+                        move_url = f"{url}/api/cards/{card.id}"
+                        async with s2.patch(move_url, headers=headers,
+                                           json={"listId": lane_id, "description": desc}) as resp:
+                            if resp.status in (200, 204):
+                                updated += 1
+                elif desc:
+                    # Update description even if lane hasn't changed
+                    async with aiohttp.ClientSession() as s2:
+                        patch_url = f"{url}/api/cards/{card.id}"
+                        async with s2.patch(patch_url, headers=headers,
+                                           json={"description": desc}) as resp:
+                            if resp.status in (200, 204):
+                                pass  # description updated
+                # Store card ID on element for future dedup
+                if not linked_card_id:
+                    _set_tracker_id(storage, el.id, channel_id, card.id)
+        else:
+            # No card — create in Backlog
+            lane_name = "Backlog"
+            lane_id = lane_by_name.get(lane_name.lower(), "")
+            if not lane_id and lane_by_name:
+                lane_id = list(lane_by_name.values())[0]
+
+            if lane_id:
+                async with aiohttp.ClientSession() as s2:
+                    create_url = f"{url}/api/lists/{lane_id}/cards"
+                    # Build description: element content (first 500 chars) + metadata
+                    el_content = getattr(el, "content", "") or ""
+                    desc = f"**{el.id}** | {el.aspect} | {el_status}\n\n{el_content[:500]}"
+                    payload = {
+                        "name": el_title[:200],
+                        "type": "project",
+                        "position": 1,
+                        "description": desc,
+                    }
+                    async with s2.post(create_url, headers=headers,
+                                     json=payload) as resp:
+                        if resp.status in (200, 201):
+                            data = await resp.json()
+                            new_card_id = data.get("item", {}).get("id", "")
+                            if new_card_id:
+                                _set_tracker_id(storage, el.id, channel_id, new_card_id)
+                            created += 1
+
+    return created, updated
+
+
+def _get_element_mtime(project_path: Path, element_id: str) -> float | None:
+    """Get modification time of an element's .md file."""
+    md_file = project_path / "aspects" / "sources" / f"{element_id}.md"
+    if not md_file.exists():
+        # Search recursively
+        for f in project_path.rglob(f"{element_id}.md"):
+            return f.stat().st_mtime
+        return None
+    return md_file.stat().st_mtime
+
+
+def _parse_planka_time(ts: str) -> float | None:
+    """Parse Planka ISO timestamp to Unix timestamp."""
+    if not ts:
+        return None
+    try:
+        from datetime import datetime, timezone
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        return dt.timestamp()
+    except (ValueError, TypeError):
+        return None
 
 
 def _ensure_sources_ingested(
@@ -159,87 +485,23 @@ def _validate_before_run(storage, methodology: Methodology, project_path: Path) 
 
 # ── License check ───────────────────────────────────────────────────
 
-# Modes that require a Pro license
-_PRO_LICENSE_MODES = frozenset({"cycle", "cycle-graph", "coding", "team"})
+@cli.command()
+@click.option(
+    "--path", "-p", default=".", type=click.Path(exists=True), help="Project path"
+)
+def sync(path: str) -> None:
+    """Bidirectional sync with all configured tracker channels.
 
-
-def _check_license(mode: str, project_path: Path, settings) -> None:
-    """Verify license before running Pro/Cloud features.
-
-    Free (spec) mode always passes. Pro modes require a valid license.
-    Cloud proxy users additionally need cloud token balance.
-
-    On failure, prints a helpful message with purchase links and exits.
+    Pulls new cards → creates spec elements.
+    Pushes element changes → updates Planka/Trello/Jira cards.
+    Safe for polling — idempotent, respects timestamps.
     """
-    if mode not in _PRO_LICENSE_MODES:
-        return  # Free mode — no license needed
-
-    license_cfg = settings.license
-    if license_cfg.backend == "noop" or not license_cfg.key:
-        console.print()
-        console.print(
-            "[red bold]Pro license required[/red bold]\n"
-            f"\n  Mode '{mode}' requires a Spec Editor Pro license.\n"
-            "\n  [dim]Get a license:[/dim] [cyan]https://gumroad.com/l/spec-editor-pro[/cyan]"
-            "\n  [dim]Then activate:[/dim] [cyan]spec-editor license activate <key>[/cyan]\n"
-        )
-        raise SystemExit(1)
-
-    # Async validation
     import asyncio
 
-    try:
-        from src.licensing import create_license_provider
-
-        provider = create_license_provider(project_path, settings)
-        status = asyncio.run(provider.validate_key(license_cfg.key, product="pro"))
-
-        if not status.valid:
-            console.print()
-            console.print(
-                f"[red bold]License invalid[/red bold]\n"
-                f"\n  {status.message}"
-                f"\n  [dim]Get a license:[/dim] [cyan]https://gumroad.com/l/spec-editor-pro[/cyan]\n"
-            )
-            raise SystemExit(1)
-
-        console.print(
-            f"[green]✓[/green] Pro license valid"
-            + (f" ({status.email})" if status.email else "")
-        )
-
-        # Cloud token check if using cloud proxy
-        if license_cfg.cloud_proxy_url and license_cfg.cloud_token_key:
-            try:
-                balance = asyncio.run(
-                    provider.get_cloud_balance(license_cfg.cloud_token_key)
-                )
-                if balance >= 0:
-                    if balance < 100000:
-                        console.print(
-                            f"[yellow]⚠[/yellow] Cloud token balance low: {balance:,} tokens"
-                        )
-                    else:
-                        console.print(
-                            f"[dim]Cloud token balance: {balance:,} tokens[/dim]"
-                        )
-            except Exception:
-                pass  # Balance check is advisory — don't block on failure
-
-    except ImportError:
-        # Licensing module not installed (shouldn't happen, but fail-safe)
-        console.print(
-            "[yellow]Warning:[/yellow] Licensing module unavailable. "
-            "Pro features may not work correctly."
-        )
-    except SystemExit:
-        raise
-    except Exception as exc:
-        console.print(f"[red]License check failed:[/red] {exc}")
-        console.print(
-            "[dim]Continuing without license validation. "
-            "Some features may be restricted.[/dim]"
-        )
+    project_path = Path(path).resolve()
+    asyncio.run(_sync_channels(project_path, direction="in"))
+    asyncio.run(_sync_channels(project_path, direction="out"))
+    print("Sync complete.")
 
 
 @cli.command()
@@ -277,24 +539,6 @@ def _check_license(mode: str, project_path: Path, settings) -> None:
     type=float,
     help="Minimum connectivity index required to proceed (0.0–∞, e.g. 0.9)",
 )
-@click.option(
-    "--mode",
-    default="spec",
-    type=click.Choice(["spec", "cycle", "cycle-graph", "coding", "team"]),
-    help="Run mode: spec, cycle, cycle-graph, coding, team (all agents)",
-)
-@click.option(
-    "--coding-provider",
-    default="opencode",
-    type=click.Choice(["opencode"]),
-    help="Coding agent provider for cycle-graph mode",
-)
-@click.option(
-    "--watch",
-    "watch_mode",
-    is_flag=True,
-    help="Continuous watch mode (cycle-graph only)",
-)
 def run(
     path: str,
     max_rounds: int | None,
@@ -305,11 +549,12 @@ def run(
     dry_run_incremental: bool,
     output_dir: str | None,
     ci: float | None,
-    mode: str,
-    coding_provider: str,
-    watch_mode: bool = False,
 ) -> None:
-    """Launch an agent dialogue to refine requirements."""
+    """Launch analytics + coding teams to refine requirements and generate code.
+
+    Analytics team (always): AI agents refine the specification across all aspects.
+    Coding team (Pro): generates code, runs tests, deploys — if Pro license present.
+    """
     import atexit
     import os
 
@@ -414,9 +659,6 @@ def run(
     if max_rounds:
         agents_config.max_rounds = max_rounds
 
-    # ── License check for Pro/Cloud modes ──
-    _check_license(mode, project_path, settings)
-
     # ── Create storage ──
     if dry_run or dry_run_incremental:
         dry_output = Path(output_dir) if output_dir else project_path / ".dry_run"
@@ -438,33 +680,30 @@ def run(
     # ── Auto-ingestion: ensure sources aspect has SRC elements ──
     _ensure_sources_ingested(project_path, storage, method, agents_config)
 
-    # ── Ensure Redis is available before non-core run modes and agent startup ──
-    if mode in ("cycle", "cycle-graph", "coding"):
-        try:
-            from src.agents.events import ensure_redis_available
-
-            ensure_redis_available(project_path)
-        except Exception as exc:
-            console.print(f"[red]Error:[/red] {exc}")
-            raise SystemExit(1)
-
-    # ── Plugin on_run hook for non-core modes (cycle, cycle-graph, coding) ──
+    # ── Plugin hook: start coding team (Pro) if license present ──
+    # The plugin spawns the coding team as a background asyncio task.
+    # It never blocks analytics — both teams run in parallel.
+    coding_task: Any = None
     try:
         from src.hooks import get_plugins
 
         for _p in get_plugins():
             try:
-                if _p.on_run(
-                    mode,
+                result = _p.on_run(
+                    "spec",
                     project_path,
                     storage,
                     method,
                     agents_config,
                     settings,
                     task or "",
-                ):
-                    # Plugin handled the run — core does not proceed.
+                )
+                if isinstance(result, bool) and result:
+                    # Plugin handled everything — core does not proceed (legacy).
                     return
+                # asyncio.Task or similar — coding team background task
+                if hasattr(result, "__await__") or hasattr(result, "cancel"):
+                    coding_task = result
             except Exception as exc:
                 console.print(f"[yellow]Warning:[/yellow] plugin on_run failed: {exc}")
     except ImportError:
@@ -720,12 +959,21 @@ def run(
             console.print(
                 "  Mode: [cyan]RESUME[/cyan] — continuing from last checkpoint"
             )
+
+        # ── Sync external channels (pull) before the run ──
+        print("[sync] Pulling from channels...", flush=True)
+        asyncio.run(_sync_channels(project_path, direction="in"))
+        print("[sync] Pull complete", flush=True)
+
         console.print()
 
         # Create lock file so VSCode can track run status
         lock_file.write_text(str(os.getpid()))
 
         result = asyncio.run(graph.run(initial_task, resume=resume))
+
+        # ── Sync external channels (push) after the run ──
+        asyncio.run(_sync_channels(project_path, direction="out"))
 
         m = result.get("last_metrics", {})
         console.print()

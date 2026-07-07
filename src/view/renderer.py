@@ -352,6 +352,15 @@ class MermaidRenderer:
 
                     edges.add((eid, target_id, rel_type))
 
+        # ── Implicit hierarchy edges from parent / children fields ──
+        # Processed AFTER the main loop so node_ids is fully populated,
+        # handling elements declared in any order within the aspect.
+        # Only adds child→parent edges (not bidirectional) to avoid clutter.
+        for el in elements:
+            pid = el.get("parent")
+            if pid and pid in node_ids:
+                edges.add((el["id"], pid, "child_of"))
+
         # When relation_scope is active, add any cross-aspect target nodes
         # that are referenced by edges but not yet in the diagram.
         if relation_scope:

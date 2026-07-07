@@ -121,6 +121,46 @@ let mcpPort: number = MCP_PORT;
 let activeMcpPort: number = MCP_PORT;
 let pythonPath: string = "python3";
 let detectedPythonPath: string = "";
+
+/** Resolve venv Python from workspace folders on startup.
+ *  Searches each workspace root + parent levels for ``.venv/bin/python3``.
+ *  Falls back to hardcoded dev path if nothing found. */
+function resolveVenvPython(): string {
+  try {
+    const fs = require("fs");
+    const folders = vscode.workspace.workspaceFolders;
+    if (folders && folders.length > 0) {
+      for (const f of folders) {
+        for (let d = f.uri.fsPath; d !== path.dirname(d); d = path.dirname(d)) {
+          const venvPy = path.join(d, ".venv", "bin", "python3");
+          if (fs.existsSync(venvPy)) {
+            return venvPy;
+          }
+        }
+      }
+    }
+    // Hardcoded dev fallback — spec-editor2 project sibling to any workspace
+    const devPath = "/Users/dmitry/Documents/Droid/spec-editor2/.venv/bin/python3";
+    if (fs.existsSync(devPath)) {
+      return devPath;
+    }
+  } catch (_) {
+    // ignore
+  }
+  return "python3";
+}
+
+/** Single source of truth for the spec-editor CLI command.
+ *  Returns ``/path/to/spec-editor`` binary or ``python -m src.main``. */
+function getSpecEditorCli(): string {
+  const py: string = detectedPythonPath || pythonPath;
+  const bin = path.join(path.dirname(py), "spec-editor");
+  const fs = require("fs");
+  if (fs.existsSync(bin)) {
+    return bin;
+  }
+  return `${py} -m src.main`;
+}
 let detectionTrace: string[] = [];
 let outputChannel: vscode.LogOutputChannel;
 let mcpReady: Promise<void> = Promise.resolve();
@@ -252,6 +292,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     log: true,
   });
   outputChannel.info("Spec Editor extension activated");
+
+  // Resolve venv Python from workspace folders on activation
+  const venv = resolveVenvPython();
+  if (venv !== "python3") {
+    pythonPath = venv;
+  }
+  outputChannel.info(`Python path: ${pythonPath} (resolved: ${venv})`);
+
+  // ── Channel sync poller: every 60s, pull/push all tracker channels ──
+  const syncInterval = setInterval(() => {
+    const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!wsRoot || runActive) return; // don't poll during active run
+    const cli = getSpecEditorCli();
+    const { exec } = require("child_process");
+    exec(`${cli} sync -p "${wsRoot}"`, { timeout: 30000 }, (err: any, stdout: string) => {
+      if (!err && stdout.trim()) {
+        outputChannel.info(`[sync] ${stdout.trim()}`);
+      }
+    });
+  }, 60_000);
+  context.subscriptions.push({ dispose: () => clearInterval(syncInterval) });
 
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument(async (doc: vscode.TextDocument) => {
@@ -965,7 +1026,7 @@ status: ${el.status || "draft"}
         vscode.window.showErrorMessage("No workspace folder open");
         return;
       }
-      const py: string = detectedPythonPath || pythonPath;
+      const cli = getSpecEditorCli();
       runTerminal = vscode.window.createTerminal({
         name: "Spec Editor Reengineer",
         hideFromUser: false,
@@ -978,11 +1039,11 @@ status: ${el.status || "draft"}
       statusBar.tooltip = "Reengineer is running — click to stop";
       statusBar.color = new vscode.ThemeColor("statusBarItem.warningForeground");
       runTerminal.sendText(
-        `cd "${wsRoot}" && ${py} -m src.main agent reengineer -p "${wsRoot}"`,
+        `${cli} agent reengineer -p "${wsRoot}"`,
       );
       runTerminal.show();
       outputChannel.info(
-        `[Reengineer] ${py} -m src.main agent reengineer -p "${wsRoot}"`,
+        `[Reengineer] ${cli} agent reengineer -p "${wsRoot}"`,
       );
       logEvent("INFO", `specEditor.reengineer: started`);
     }),
@@ -1015,10 +1076,8 @@ status: ${el.status || "draft"}
         format.label === "jira" ? "csv" : "xlsx";
       const outFile = `${wsRoot}/export.${ext}`;
 
-      // Resolve spec-editor binary: use the venv bin dir from detectedPythonPath
-      const pyDir = path.dirname(detectedPythonPath || pythonPath);
-      const specEditorBin = path.join(pyDir, "spec-editor");
-      const cli = require("fs").existsSync(specEditorBin) ? specEditorBin : "spec-editor";
+      // Resolve spec-editor binary via shared helper
+      const cli = getSpecEditorCli();
 
       const term = vscode.window.createTerminal({
         name: `Spec Editor Export (${format.label})`,
@@ -1065,14 +1124,8 @@ status: ${el.status || "draft"}
         return;
       }
 
-      // Detect dev mode: wsRoot has src/__init__.py → use it as CWD
-      // so python -m src.main can find the module.
-      const srcInit: string = path.join(wsRoot, "src", "__init__.py");
-      const cwd: string = require("fs").existsSync(srcInit)
-        ? wsRoot
-        : path.dirname(detectedPythonPath || pythonPath);
-
-      const py: string = detectedPythonPath || pythonPath;
+      // Use spec-editor CLI via shared helper
+      const cli = getSpecEditorCli();
       runTerminal = vscode.window.createTerminal({
         name: "Spec Editor Run",
         hideFromUser: false,
@@ -1091,15 +1144,15 @@ status: ${el.status || "draft"}
         "statusBarItem.warningForeground",
       );
       runTerminal.sendText(
-        `cd "${cwd}" && ${py} -m src.main run -p "${wsRoot}"`,
+        `${cli} run -p "${wsRoot}"`,
       );
       runTerminal.show();
       outputChannel.info(
-        `[Run] CMD: cd "${cwd}" && ${py} -m src.main run -p "${wsRoot}"`,
+        `[Run] CMD: ${cli} run -p "${wsRoot}"`,
       );
       logEvent(
         "INFO",
-        `specEditor.run: CMD: cd "${cwd}" && ${py} -m src.main run -p "${wsRoot}"`,
+        `specEditor.run: CMD: ${cli} run -p "${wsRoot}"`,
       );
       vscode.window.withProgress(
         {
@@ -2548,12 +2601,12 @@ async function handleNewProject(): Promise<void> {
 
   const terminal: vscode.Terminal =
     vscode.window.createTerminal("Spec Editor Init");
-  const py: string = detectedPythonPath || pythonPath;
+  const cli = getSpecEditorCli();
   const wsRoot: string =
     vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || ".";
   const projDir: string = path.join(wsRoot, name);
   terminal.sendText(
-    `mkdir -p "${projDir}" && cd "${projDir}" && "${py}" -m src.main init ${name} --methodology ${method}`,
+    `mkdir -p "${projDir}" && cd "${projDir}" && ${cli} init ${name} --methodology ${method}`,
   );
   terminal.show();
   outputChannel.info(`New project: ${projDir} with ${method}`);
