@@ -937,6 +937,8 @@ async def cleanup_fixed_bugs_tool(storage: StorageAdapter) -> dict:
     from datetime import datetime, timezone
     from pathlib import Path as _Path
 
+    from src.config import get_logger
+
     _log = get_logger(__name__)
 
     elements = storage.list_all()

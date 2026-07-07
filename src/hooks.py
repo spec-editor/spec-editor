@@ -64,15 +64,18 @@ class SpecEditorPlugin(ABC):
         agents_config,
         settings,
         initial_task: str,
-    ) -> bool:
-        """Handle a run request for non-core modes.
+    ) -> Any:
+        """Handle a run request.
 
-        Called when ``spec-editor run`` is invoked with a mode
-        other than "spec" (e.g., "cycle-graph", "cycle", "coding").
+        Called on every ``spec-editor run``.  The default ``mode`` is
+        ``"spec"`` (analytics team).  Pro plugins can return an
+        ``asyncio.Task`` to run the coding team in parallel.
 
         Returns:
-            True if the plugin handled the run (core should not proceed).
-            False if the mode is not recognized by this plugin.
+            - ``True``: plugin handled everything — core does NOT proceed.
+            - ``asyncio.Task``: plugin spawned a background coding team.
+              Core runs analytics in parallel.  Both complete together.
+            - ``False`` / ``None``: plugin has nothing to do.  Core proceeds.
         """
         return False
 

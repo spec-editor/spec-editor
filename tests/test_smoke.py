@@ -98,7 +98,7 @@ class TestSmokeCommands:
 
     def test_init_creates_project(self, runner, tmp_path):
         proj = tmp_path / "test-proj"
-        result = runner.invoke(cli, ["init", str(proj)])
+        result = runner.invoke(cli, ["init", str(proj), "--non-interactive"])
         assert result.exit_code == 0
         assert (proj / "methodology.yaml").exists()
         assert (proj / "agents.yaml").exists()
@@ -107,12 +107,12 @@ class TestSmokeCommands:
 
     def test_status_on_empty_project(self, runner, tmp_path):
         proj = tmp_path / "test-proj"
-        runner.invoke(cli, ["init", str(proj)])
+        runner.invoke(cli, ["init", str(proj), "--non-interactive"])
         result = runner.invoke(cli, ["status", "-p", str(proj)])
         assert result.exit_code == 0
 
     def test_validate_on_empty_project(self, runner, tmp_path):
         proj = tmp_path / "test-proj"
-        runner.invoke(cli, ["init", str(proj)])
+        runner.invoke(cli, ["init", str(proj), "--non-interactive"])
         result = runner.invoke(cli, ["validate", "-p", str(proj)])
         assert result.exit_code == 0
