@@ -1,6 +1,6 @@
 <p align="center">
   <h1 align="center">Spec Editor</h1>
-  <h3 align="center">AI-powered requirements engineering with methodology support</h3>
+  <h3 align="center">Active Memory Layer for Requirements & Code — powered by AI agents</h3>
 </p>
 
 <p align="center">
@@ -17,31 +17,70 @@
 
 ---
 
+**Spec Editor is an active memory layer for AI-driven development.**
+Unlike passive docs, this memory is alive — AI agents continuously debate,
+cross-reference, and evolve the project knowledge.
+
+```bash
+pip install spec-editor && spec-editor init --with-example && spec-editor run
+```
+
+> *Every AI coding agent suffers from amnesia between sessions. Spec Editor gives them — and your team — a shared, persistent memory that grows smarter with every run. Not a wiki. Not a task tracker. An active, self-maintaining knowledge base that debates its own completeness.*
+
+---
+
+## Why Now?
+
+Cursor, Copilot, and Claude Code have made AI-assisted coding mainstream. But they all share one critical flaw: **no memory between sessions**. Every conversation starts from zero.
+
+Spec Editor is the missing layer — a **team memory for the AI era**. Solo developers get a structured analysis process they'd otherwise skip. Teams get a single source of truth that stays in sync with code via `@implements` traceability.
+
+> Built with 2 years of LLM engineering experience and 20+ years in software development.
+
+---
+
 ## What is Spec Editor?
 
-Spec Editor turns messy requirements documents into structured specifications
-using multiple AI agents in a structured dialogue. It's built around a **pluggable
-methodology system** — define any set of aspects (for ex. modules, scenarios, UI,
-entities, NFRs), their relationships, and the agent skills that populate them. Then it
-connects to your AI coding agent (Claude Code, Cursor, Zed) via MCP so your
-generated code stays aligned with your requirements.
+Spec Editor is an **active memory system** for your project. AI agents don't just
+write to it — they debate, cross-validate, and continuously refine the knowledge.
+Every specification element is a version-controlled artifact that any AI coding
+agent can query via MCP.
+
+```
+         ┌─────────────────────────────────────┐
+         │           ACTIVE MEMORY              │
+         │                                      │
+         │   ┌──────┐  ┌──────┐  ┌─────────┐   │
+         │   │Agent 1│  │Agent 2│  │Orchestr.│  │  ← debate & refine
+         │   └──┬───┘  └───┬───┘  └────┬────┘   │
+         │      │          │           │        │
+         │      ▼          ▼           ▼        │
+         │   ┌──────────────────────────────┐   │
+         │   │  Structured Knowledge Base   │   │  ← YAML + Markdown + Git
+         │   │  MOD-001  SCN-007  ENT-004   │   │
+         │   └──────────────────────────────┘   │
+         │                                      │
+         │   MCP → Cursor, Claude, Zed, ...     │  ← any agent can query
+         └─────────────────────────────────────┘
+```
+
+Built around a **pluggable methodology system** — define any set of aspects
+(for ex. modules, scenarios, UI, entities, NFRs), their relationships, and the
+agent skills that populate them. Create your own or use the built-in waterfall.
 
 **It is:**
-- A CLI tool that generates specifications via multi-agent debate
+- An **active memory layer** — AI agents debate, maintain, and evolve project knowledge
 - A methodology engine — define your own aspects, relationships, and agent skills in YAML
 - An architectural code generator — produces structured code from patterns (hexagonal, DDD, MVC)
-- An MCP server so external AI agents can read your specification
-- A VS Code extension with tree view, validation panel, and Mermaid diagrams
-- A local web UI for browsing specifications without touching a terminal
+- An MCP server — 20+ tools for external AI agents to read and search your specification
+- A VS Code extension + web UI — browse specs visually, no terminal required
 
 **It is NOT:**
-- A task tracker (use Jira/Linear for that — we export to them)
-- A replacement for developers (agents debate, humans decide)
-- A one-size-fits-all template — methodologies are pluggable, not hardcoded
+- A replacement for human decision-making — agents debate, humans decide
 
 > [!NOTE]
-> Spec Editor works with any OpenAI-compatible API (DeepSeek, OpenAI, Anthropic).
-> Default: DeepSeek Reasoner (~$0.55/M tokens, 5× cheaper than GPT-4).
+> Works with any OpenAI-compatible API. Default: DeepSeek Reasoner (~$0.55/M tokens).
+> **Free & Open Source** — Apache 2.0. No per-seat pricing, no vendor lock-in, your data stays in your Git repo.
 
 ---
 
@@ -52,6 +91,7 @@ generated code stays aligned with your requirements.
 - **Engineering teams** — need traceability from requirements to deployed code
 - **Technical PMs** — tired of Word docs and Jira tickets drifting apart over time
 - **AI-assisted developers** — using Cursor, Claude Code, or Zed — give your coding agent full spec context
+- **AI agent developers** — give your agents a shared, persistent memory of project requirements, decisions, and code contracts via MCP
 - **Vibe-coders** — gives you a secret sauce of technical architecture and professional-grade requirements
 
 ---
@@ -91,7 +131,7 @@ can achieve.
 | Single perspective | Multi-agent debate with structured rounds |
 | No adversarial review | Agents challenge each other — edge cases, contradictions caught |
 | Freeform output | Methodology-driven: modules, scenarios, UI, data, NFR, metrics |
-| Ephemeral session | Version-controlled artifacts in git (Markdown + YAML) |
+| No persistent memory | **Full project memory** — every decision, requirement, and relationship is versioned in Git |
 
 ---
 
