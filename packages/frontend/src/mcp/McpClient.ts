@@ -133,13 +133,9 @@ export class McpClient {
 
     console.log(`[spec-editor] sendRequest ${method} url=${this.serverUrl}`);
 
-    // VSCode WebView transport
-    if (this.serverUrl.startsWith("vscode://")) {
-      console.log(`[spec-editor] → vscode bridge`);
-      const result = await this.sendViaVscode<T>(body);
-      console.log(`[spec-editor] ← vscode result:`, result);
-      return result;
-    }
+    // VSCode WebView: bridge.js intercepts fetch("vscode://mcp") and
+    // handles postMessage. We use regular fetch — bridge does the rest.
+    // (Do NOT call acquireVsCodeApi() here — bridge already owns it.)
 
     const response = await fetch(this.serverUrl, {
       method: "POST",

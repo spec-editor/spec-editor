@@ -15,6 +15,9 @@ because module-level get_logger() calls trigger auto-configuration.
 # ── Constants ──
 _DEFAULT_MCP_PORT = 8088
 
+# Planka access token for iframe proxy (auto-login)
+PLANKA_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IjU0ODBmYTYwLTE0OWUtNDQ1Ni1iY2Q3LWUyNmE1MTQ0MTU3MSJ9.eyJpYXQiOjE3ODMyNTM1MDksImV4cCI6MTgxNDc4OTUwOSwic3ViIjoiMTgxMjQyMTY4NDA4MzI5NTIzMyJ9.RFpr-ZVGapHgfJgdN2RA2oyA0YDq0JcGwebX_G7NwxI"
+
 # Performance thresholds (REQ-001)
 _READ_THRESHOLD_MS = 200
 _WRITE_THRESHOLD_MS = 500
@@ -1027,13 +1030,13 @@ class _MCPHTTPHandler(BaseHTTPRequestHandler):
         pass  # Suppress HTTP server logs to stderr
 
     def do_GET(self):
-        """Serve SSE /events endpoint and MCP health check."""
+        """Serve SSE /events endpoint, MCP health check, or proxy to Planka."""
         if self.path == "/events":
             self._handle_sse()
         elif self.path == "/mcp":
             self._handle_mcp_get()
         else:
-            self.send_error(404)
+            self._handle_planka_proxy()
 
     def _handle_mcp_get(self):
         """Health check / SSE negotiation for MCP Streamable HTTP."""
@@ -1073,9 +1076,133 @@ class _MCPHTTPHandler(BaseHTTPRequestHandler):
 
         stream_sse_events(handler.sse_hub, write_fn, stop_event)
 
+    def _handle_planka_proxy(self):
+        """Proxy all non-MCP requests to Planka at localhost:3001 with auth token.
+
+        If the path starts with /planka/, the prefix is stripped.
+        Otherwise the path is forwarded as-is (for Planka's own API/Socket.IO calls).
+        """
+        import urllib.request
+        import urllib.error
+
+        path = self.path
+        if path.startswith("/planka/"):
+            path = path[7:]  # strip /planka prefix
+            if not path:
+                path = "/"
+
+        # Preserve query string
+        target = f"http://localhost:3001{path}"
+        if "?" in self.path:
+            target += "?" + self.path.split("?", 1)[1]
+
+        try:
+            req = urllib.request.Request(target)
+            req.add_header("Authorization", f"Bearer {PLANKA_TOKEN}")
+            # Forward ALL client headers to Planka (needed for Socket.IO handshake)
+            for hdr_name, hdr_val in self.headers.items():
+                low = hdr_name.lower()
+                if low in ("host",):  # let urllib set the correct Host
+                    continue
+                if low.startswith("x-") or low in ("origin", "referer", "user-agent",
+                                                     "accept", "accept-language",
+                                                     "accept-encoding", "connection",
+                                                     "cookie"):
+                    req.add_header(hdr_name, hdr_val)
+
+            try:
+                resp = urllib.request.urlopen(req, timeout=30)
+            except urllib.error.HTTPError as err:
+                resp = err  # Forward non-2xx responses too (e.g. Socket.IO 400)
+
+            body = resp.read()
+            content_type = resp.getheader("Content-Type", "")
+
+            # Inject access token cookie into Planka's HTML so the React
+            # app finds it and considers the user logged in.
+            if "text/html" in content_type and body:
+                from email.utils import formatdate as _fmtdate
+                import base64 as _b64
+                try:
+                    payload_b64 = PLANKA_TOKEN.split(".")[1]
+                    payload_b64 += "=" * (4 - len(payload_b64) % 4)
+                    decoded = json.loads(_b64.urlsafe_b64decode(payload_b64))
+                    exp_ts = decoded.get("exp", 9999999999)
+                    exp_date = _fmtdate(exp_ts, usegmt=True)
+                except Exception:
+                    exp_date = _fmtdate(9999999999, usegmt=True)
+
+                cookie_js = (
+                    b"<script>"
+                    b"document.cookie='accessToken=" + PLANKA_TOKEN.encode() + b";path=/;expires=" + exp_date.encode() + b";SameSite=Strict';"
+                    b"document.cookie='accessTokenVersion=1;path=/;expires=" + exp_date.encode() + b";SameSite=Strict';"
+                    b"window.__SOCKET_IO_OPTS__={transports:['polling']};"
+                    b"</script>"
+                )
+                body = body.replace(b"</head>", cookie_js + b"</head>")
+
+            self.send_response(resp.status)
+            for key, val in resp.getheaders():
+                low = key.lower()
+                if low not in ("transfer-encoding", "content-length"):
+                    self.send_header(key, val)
+            # Content-Length may have changed due to token injection
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as exc:
+            self.send_error(502, f"Planka proxy error: {exc}")
+
+    def _handle_planka_proxy_post(self):
+        """Proxy POST/PUT/PATCH/DELETE requests to Planka."""
+        import urllib.request
+        import urllib.error
+
+        path = self.path
+        if path.startswith("/planka/"):
+            path = path[7:]
+            if not path:
+                path = "/"
+
+        target = f"http://localhost:3001{path}"
+        if "?" in self.path:
+            target += "?" + self.path.split("?", 1)[1]
+
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(content_length) if content_length > 0 else b""
+
+        try:
+            req = urllib.request.Request(target, data=body, method=self.command)
+            req.add_header("Authorization", f"Bearer {PLANKA_TOKEN}")
+            # Forward relevant headers
+            for hdr in ("content-type", "accept", "accept-language", "origin"):
+                if hdr in self.headers:
+                    req.add_header(hdr.title(), self.headers[hdr])
+            if "cookie" in self.headers:
+                req.add_header("Cookie", self.headers["cookie"])
+
+            try:
+                resp = urllib.request.urlopen(req, timeout=30)
+            except urllib.error.HTTPError as err:
+                resp = err
+
+            resp_body = resp.read()
+            self.send_response(resp.status)
+            for key, val in resp.getheaders():
+                low = key.lower()
+                if low not in ("transfer-encoding",):
+                    self.send_header(key, val)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(resp_body)
+        except Exception as exc:
+            self.send_error(502, f"Planka proxy {self.command} error: {exc}")
+
     def do_POST(self):
+        """Handle MCP JSON-RPC or proxy to Planka."""
         if self.path != "/mcp":
-            self.send_error(404)
+            self._handle_planka_proxy_post()
             return
 
         # REQ-001: measure from transport layer entry to response emission
@@ -1122,12 +1249,22 @@ class _MCPHTTPHandler(BaseHTTPRequestHandler):
             _log_perf(params.get("name", ""), (time.perf_counter() - start) * 1000)
 
     def do_OPTIONS(self):
-        """CORS preflight."""
+        """CORS preflight for MCP and Planka proxy."""
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept")
+        self.send_header("Access-Control-Allow-Credentials", "true")
         self.end_headers()
+
+    def do_PUT(self):
+        self._handle_planka_proxy_post()
+
+    def do_PATCH(self):
+        self._handle_planka_proxy_post()
+
+    def do_DELETE(self):
+        self._handle_planka_proxy_post()
 
 
 _LOCALHOST_ONLY = "127.0.0.1"

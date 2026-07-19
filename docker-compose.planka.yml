@@ -1,0 +1,42 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: planka
+      POSTGRES_USER: planka
+      POSTGRES_PASSWORD: planka123
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U planka"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  planka:
+    image: ghcr.io/plankanban/planka:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3001:1337"
+    environment:
+      BASE_URL: "http://localhost:3001"
+      DATABASE_URL: "postgresql://planka:planka123@postgres/planka"
+      SECRET_KEY: "spec-editor-dev-secret-key-change-in-prod"
+      TRUST_PROXY: "0"
+      DEFAULT_ADMIN_EMAIL: "admin@spec-editor.local"
+      DEFAULT_ADMIN_PASSWORD: "adminadmin"
+      DEFAULT_ADMIN_NAME: "Spec Editor Admin"
+      DEFAULT_ADMIN_USERNAME: "admin"
+    volumes:
+      - planka_data:/app/public/user-avatars
+      - planka_data:/app/public/project-background-images
+      - planka_attachments:/app/private/attachments
+
+volumes:
+  pgdata:
+  planka_data:
+  planka_attachments:

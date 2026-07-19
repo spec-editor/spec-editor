@@ -505,6 +505,50 @@ def sync(path: str) -> None:
 
 
 @cli.command()
+def install_vscode() -> None:
+    """Install the VSCode extension (if VSCode is installed on this host).
+
+    Finds the bundled .vsix file and runs ``code --install-extension``.
+    Safe to run multiple times — uses --force to update.
+    """
+    import shutil
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    if not shutil.which("code"):
+        print("VSCode CLI ('code') not found on PATH. Skipping.")
+        return
+
+    # Find the bundled .vsix
+    candidates = [
+        Path(__file__).resolve().parent.parent / "packages" / "vscode-extension"
+        / "spec-editor-vscode-0.1.0.vsix",
+        Path(sys.prefix) / "share" / "spec-editor" / "spec-editor-vscode-0.1.0.vsix",
+    ]
+    vsix = None
+    for c in candidates:
+        if c.exists():
+            vsix = c
+            break
+
+    if not vsix:
+        print("Bundled .vsix not found. Build it with: cd packages/vscode-extension && npm run build")
+        return
+
+    print(f"Installing VSCode extension from: {vsix}")
+    result = subprocess.run(
+        ["code", "--install-extension", str(vsix), "--force"],
+        capture_output=False,
+        timeout=30,
+    )
+    if result.returncode == 0:
+        print("VSCode extension installed. Reload VSCode window to activate.")
+    else:
+        print(f"Install failed (exit code {result.returncode})")
+
+
+@cli.command()
 @click.option(
     "--path", "-p", default=".", type=click.Path(exists=True), help="Project path"
 )

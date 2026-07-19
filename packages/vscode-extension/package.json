@@ -591,7 +591,7 @@
   "scripts": {
     "compile": "node esbuild.config.js",
     "watch": "node esbuild.config.js --watch",
-    "build": "node esbuild.config.js --production && cd ../frontend && npm run export && cp -r out ../vscode-extension/dist/",
+    "build": "node esbuild.config.js --production && cp src/bridge.js dist/ && cd ../frontend && npm run export && cp -r out ../vscode-extension/dist/",
     "typecheck": "tsc --noEmit",
     "package": "npm run build && vsce package --no-dependencies && code --install-extension spec-editor-vscode-0.1.0.vsix --force",
     "lint": "eslint src/",

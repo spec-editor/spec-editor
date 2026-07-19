@@ -122,44 +122,58 @@ let activeMcpPort: number = MCP_PORT;
 let pythonPath: string = "python3";
 let detectedPythonPath: string = "";
 
-/** Resolve venv Python from workspace folders on startup.
- *  Searches each workspace root + parent levels for ``.venv/bin/python3``.
- *  Falls back to hardcoded dev path if nothing found. */
-function resolveVenvPython(): string {
+/** Resolve the spec-editor CLI command from the current environment.
+ *  Priority: pip binary > workspace .venv > extension .venv > PATH > python3 -m
+ */
+function resolveSpecEditorCli(): string {
   try {
     const fs = require("fs");
+
+    // 1. Try spec-editor binary next to detected Python
+    const py = detectedPythonPath || pythonPath;
+    const bin = path.join(path.dirname(py), "spec-editor");
+    if (fs.existsSync(bin)) return bin;
+
+    // 2. Search workspace + parent dirs for .venv/bin/spec-editor
+    // Also check sibling dirs (e.g. spec-editor2 next to the user's project)
     const folders = vscode.workspace.workspaceFolders;
-    if (folders && folders.length > 0) {
+    if (folders) {
       for (const f of folders) {
         for (let d = f.uri.fsPath; d !== path.dirname(d); d = path.dirname(d)) {
-          const venvPy = path.join(d, ".venv", "bin", "python3");
-          if (fs.existsSync(venvPy)) {
-            return venvPy;
-          }
+          const venvBin = path.join(d, ".venv", "bin", "spec-editor");
+          if (fs.existsSync(venvBin)) return venvBin;
+          // Also check siblings at each level
+          try {
+            const siblings = fs.readdirSync(d, { withFileTypes: true });
+            for (const sib of siblings) {
+              if (!sib.isDirectory()) continue;
+              const sibVenv = path.join(d, sib.name, ".venv", "bin", "spec-editor");
+              if (fs.existsSync(sibVenv)) return sibVenv;
+            }
+          } catch { /* skip unreadable dirs */ }
         }
       }
     }
-    // Hardcoded dev fallback — spec-editor2 project sibling to any workspace
-    const devPath = "/Users/dmitry/Documents/Droid/spec-editor2/.venv/bin/python3";
-    if (fs.existsSync(devPath)) {
-      return devPath;
-    }
-  } catch (_) {
-    // ignore
-  }
-  return "python3";
-}
 
-/** Single source of truth for the spec-editor CLI command.
- *  Returns ``/path/to/spec-editor`` binary or ``python -m src.main``. */
-function getSpecEditorCli(): string {
-  const py: string = detectedPythonPath || pythonPath;
-  const bin = path.join(path.dirname(py), "spec-editor");
-  const fs = require("fs");
-  if (fs.existsSync(bin)) {
-    return bin;
-  }
-  return `${py} -m src.main`;
+    // 3. Search extension's own install path + parents for .venv/bin/spec-editor
+    try {
+      for (let d = extensionContext.extensionUri.fsPath; d !== path.dirname(d); d = path.dirname(d)) {
+        const venvBin = path.join(d, ".venv", "bin", "spec-editor");
+        if (fs.existsSync(venvBin)) return venvBin;
+        if (d === "/") break;
+      }
+    } catch { /* ignore */ }
+
+    // 4. Try pip-installed spec-editor from PATH
+    const which = require("child_process").spawnSync("which", ["spec-editor"], { timeout: 2000 });
+    if (which.status === 0 && which.stdout) {
+      const binPath = which.stdout.toString().trim();
+      if (binPath && fs.existsSync(binPath)) return binPath;
+    }
+  } catch (_) { /* ignore */ }
+
+  // Fallback: python3 module
+  return `${detectedPythonPath || pythonPath} -m spec_editor`;
 }
 let detectionTrace: string[] = [];
 let outputChannel: vscode.LogOutputChannel;
@@ -293,18 +307,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   outputChannel.info("Spec Editor extension activated");
 
-  // Resolve venv Python from workspace folders on activation
-  const venv = resolveVenvPython();
-  if (venv !== "python3") {
-    pythonPath = venv;
-  }
-  outputChannel.info(`Python path: ${pythonPath} (resolved: ${venv})`);
+  // Resolve spec-editor CLI on activation
+  const cliPath = resolveSpecEditorCli();
+  outputChannel.info(`Spec Editor CLI: ${cliPath}`);
 
   // ── Channel sync poller: every 60s, pull/push all tracker channels ──
   const syncInterval = setInterval(() => {
     const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!wsRoot || runActive) return; // don't poll during active run
-    const cli = getSpecEditorCli();
+    const cli = resolveSpecEditorCli();
     const { exec } = require("child_process");
     exec(`${cli} sync -p "${wsRoot}"`, { timeout: 30000 }, (err: any, stdout: string) => {
       if (!err && stdout.trim()) {
@@ -1026,7 +1037,7 @@ status: ${el.status || "draft"}
         vscode.window.showErrorMessage("No workspace folder open");
         return;
       }
-      const cli = getSpecEditorCli();
+      const cli = resolveSpecEditorCli();
       runTerminal = vscode.window.createTerminal({
         name: "Spec Editor Reengineer",
         hideFromUser: false,
@@ -1077,7 +1088,7 @@ status: ${el.status || "draft"}
       const outFile = `${wsRoot}/export.${ext}`;
 
       // Resolve spec-editor binary via shared helper
-      const cli = getSpecEditorCli();
+      const cli = resolveSpecEditorCli();
 
       const term = vscode.window.createTerminal({
         name: `Spec Editor Export (${format.label})`,
@@ -1125,7 +1136,7 @@ status: ${el.status || "draft"}
       }
 
       // Use spec-editor CLI via shared helper
-      const cli = getSpecEditorCli();
+      const cli = resolveSpecEditorCli();
       runTerminal = vscode.window.createTerminal({
         name: "Spec Editor Run",
         hideFromUser: false,
@@ -1747,28 +1758,19 @@ async function detectPython(
     path.join(home, ".local", "bin", "python"),
   );
 
-  const devPaths: string[] = [
-    path.join(
-      home,
-      "Documents",
-      "Droid",
-      "spec-editor2",
-      ".venv",
-      "bin",
-      "python",
-    ),
-    path.join(
-      home,
-      "Documents",
-      "Droid",
-      "spec-editor2",
-      ".venv",
-      "bin",
-      "python3",
-    ),
-    path.join(home, "spec-editor2", ".venv", "bin", "python"),
-    path.join(home, "spec-editor2", ".venv", "bin", "python3"),
-  ];
+  const devPaths: string[] = [];
+  // Check .venv relative to the extension's own install location
+  try {
+    const extRoot = extensionContext.extensionUri.fsPath;
+    for (let d = extRoot; d !== path.dirname(d); d = path.dirname(d)) {
+      for (const name of ["python3", "python"]) {
+        const venvPy = path.join(d, ".venv", "bin", name);
+        if (require("fs").existsSync(venvPy)) devPaths.push(venvPy);
+      }
+      // Stop after checking a few levels up
+      if (d === path.dirname(d) || d === "/") break;
+    }
+  } catch { /* ignore */ }
   for (const dp of devPaths) {
     if (require("fs").existsSync(dp) && !candidates.includes(dp)) {
       candidates.push(dp);
@@ -1972,16 +1974,9 @@ async function startMcpServer(
       );
 
       if (localPath) {
-        // Try Docker-mapped path first (volume: ~/Documents/Droid → /projects)
-        const homeDir: string = require("os").homedir();
-        const droidPrefix: string = path.join(homeDir, "Documents", "Droid");
-        let dockerPath: string | undefined;
-        if (localPath.startsWith(droidPrefix)) {
-          dockerPath = "/projects" + localPath.substring(droidPrefix.length);
-        }
-
+        // Try local project path directly
         let switched = false;
-        for (const p of [dockerPath, localPath]) {
+        for (const p of [localPath]) {
           if (!p) continue;
           try {
             // Multi-project: verify project reachable by listing elements
@@ -2032,159 +2027,36 @@ async function startMcpServer(
     return;
   }
 
-  let pythonPath2: string = await detectPython(config);
-  detectedPythonPath = pythonPath2;
-  const importCode: string =
-    "from src.mcp.server import MCPHandler, run_http_server; print('ok')";
-  let specEditorInstalled: boolean = false;
+  // Use the same CLI resolution as the rest of the extension
+  const cli = resolveSpecEditorCli();
+  outputChannel.info(`Starting MCP server with: ${cli}`);
 
-  const tryImportOn = async (py: string, cwd?: string): Promise<boolean> => {
+  // Verify the CLI works
+  let cliWorks = false;
+  try {
+    const test = await execCommand(cli, ["--version"], 5000);
+    if (test.stdout.trim()) {
+      outputChannel.info(`spec-editor version: ${test.stdout.trim()}`);
+      cliWorks = true;
+    }
+  } catch {
+    // Try python module form
+  }
+  if (!cliWorks) {
     try {
-      const result = await execCommand(py, ["-c", importCode], 5000, cwd);
-      if (result.stdout.trim() === "ok") {
-        outputChannel.info(
-          `spec-editor found: ${py}${cwd ? " (dev mode)" : ""}`,
-        );
-        return true;
-      }
-    } catch {
-      // not found
-    }
-    return false;
-  };
-
-  if (workspaceRoot) {
-    const srcInit: string = path.join(workspaceRoot, "src", "__init__.py");
-    if (require("fs").existsSync(srcInit)) {
-      if (await tryImportOn(pythonPath2, workspaceRoot)) {
-        specEditorInstalled = true;
-      }
-    }
+      const py = detectedPythonPath || pythonPath;
+      const test = await execCommand(py, ["-m", "spec_editor", "--version"], 5000);
+      if (test.stdout.trim()) cliWorks = true;
+    } catch { /* ignore */ }
   }
 
-  if (!specEditorInstalled) {
-    if (await tryImportOn(pythonPath2)) {
-      specEditorInstalled = true;
-    }
-  }
-
-  if (!specEditorInstalled) {
-    logEvent(
-      "WARN",
-      `RETRY: spec-editor not in ${pythonPath2} — trying alternatives`,
-    );
-    detectionTrace.push(
-      `RETRY: spec-editor not in ${pythonPath2}, trying alternatives...`,
-    );
-    logEvent(
-      "WARN",
-      `spec-editor not found in detected Python (${pythonPath2}). Trying alternatives...`,
-    );
-
-    const altPythons: string[] = [];
-    const home: string = require("os").homedir();
-
-    if (workspaceRoot) {
-      altPythons.push(
-        path.join(workspaceRoot, ".venv", "bin", "python"),
-        path.join(workspaceRoot, ".venv", "bin", "python3"),
-      );
-    }
-
-    try {
-      const { stdout } = await execCommand(
-        "/bin/sh",
-        [
-          "-lc",
-          "which python3 2>/dev/null || which python 2>/dev/null || echo ''",
-        ],
-        3000,
-      );
-      const sh: string = stdout.trim();
-      if (sh) altPythons.push(sh);
-    } catch {
-      // ignore
-    }
-
-    const devPaths: string[] = [
-      path.join(
-        home,
-        "Documents",
-        "Droid",
-        "spec-editor2",
-        ".venv",
-        "bin",
-        "python",
-      ),
-      path.join(
-        home,
-        "Documents",
-        "Droid",
-        "spec-editor2",
-        ".venv",
-        "bin",
-        "python3",
-      ),
-      path.join(home, "spec-editor2", ".venv", "bin", "python"),
-      path.join(home, "spec-editor2", ".venv", "bin", "python3"),
-    ];
-    for (const dp of devPaths) {
-      if (require("fs").existsSync(dp)) altPythons.push(dp);
-    }
-    altPythons.push(
-      path.join(home, ".local", "bin", "python3"),
-      path.join(home, ".local", "bin", "python"),
-    );
-
-    for (const alt of altPythons) {
-      if (alt === pythonPath2) continue;
-      logEvent("INFO", `TRY: ${alt}`);
-      detectionTrace.push(`TRY: ${alt}`);
-      outputChannel.info(`Trying alternative Python: ${alt}`);
-      if (await tryImportOn(alt)) {
-        logEvent("OK", `FOUND spec-editor in ${alt}`);
-        detectionTrace.push(`FOUND: spec-editor in ${alt}`);
-        pythonPath2 = alt;
-        detectedPythonPath = alt;
-        specEditorInstalled = true;
-        break;
-      }
-    }
-  }
-
-  if (!specEditorInstalled) {
-    const installCmd: string = `${pythonPath2} -m pip install spec-editor`;
-    logEvent("WARN", `[startMcp] spec-editor NOT FOUND for: ${pythonPath2}`);
-    logEvent("ERROR", `spec-editor NOT FOUND for: ${pythonPath2}`);
-    const msg: string = `spec-editor Python module not found for: ${pythonPath2}`;
-    const choice: string | undefined = await vscode.window.showErrorMessage(
-      msg,
-      { modal: false },
-      "Configure Python path...",
-      "Install spec-editor",
-      "Later",
-    );
-    if (choice === "Configure Python path...") {
-      vscode.commands.executeCommand(
-        "workbench.action.openSettings",
-        "@ext:spec-editor.spec-editor-vscode",
-      );
-      outputChannel.info(
-        `User chose to configure pythonPath. Detected: ${pythonPath2}`,
-      );
-    } else if (choice === "Install spec-editor") {
-      const terminal: vscode.Terminal = vscode.window.createTerminal(
-        "Spec Editor Install",
-      );
-      terminal.sendText(installCmd);
-      terminal.show();
-      outputChannel.info(`User chose to install: ${installCmd}`);
-    }
-    logEvent(
-      "WARN",
-      `[MCP] Set tooltip: Not connected — ${pythonPath2} has no spec-editor`,
-    );
-    statusBar.tooltip = `Not connected — ${pythonPath2} has no spec-editor. Click gear to configure.`;
+  if (!cliWorks) {
+    const msg = `spec-editor CLI not found. Tried: ${cli}`;
+    logEvent("ERROR", msg);
+    vscode.window.showErrorMessage(msg, "Configure...", "Later").then((choice) => {
+      if (choice === "Configure...") vscode.commands.executeCommand("workbench.action.openSettings", "@ext:spec-editor.spec-editor-vscode");
+    });
+    statusBar.tooltip = "spec-editor CLI not found. Click gear to configure.";
     return;
   }
 
@@ -2231,10 +2103,6 @@ async function startMcpServer(
   const MAX_RESTARTS: number = 3;
 
   const spawnMcp = async (): Promise<void> => {
-    const serverCode: string = projectPath
-      ? `from pathlib import Path; from src.mcp.server import MCPHandler, run_http_server; handler = MCPHandler(project_path=Path("${projectPath.replace(/"/g, '\\"')}"), writable=True); run_http_server(handler, '127.0.0.1', ${actualPort})`
-      : `from src.mcp.server import MCPHandler, run_http_server; handler = MCPHandler(project_path=None, writable=True); run_http_server(handler, '127.0.0.1', ${actualPort})`;
-
     const envOverrides: Record<string, string> = {};
     try {
       const apiKey: string | undefined =
@@ -2281,53 +2149,15 @@ async function startMcpServer(
         envOverrides[`${pfx}__MAX_TOKENS`] = String(maxTokens);
     }
 
-    // Determine the spec-editor2 source repo root.
-    // Priority 1: extension-relative path (dev mode — source lives next to extension).
-    let repoRoot: string = path.resolve(extensionContext.extensionPath, "..", "..");
-    let localServerPath: string = path.join(repoRoot, "src", "mcp", "server.py");
+    // Spawn MCP server directly using the resolved CLI
+    const cliParts = cli.split(" ");
+    const cliCmd = cliParts[0];
+    const cliArgs = cliParts.slice(1);
+    const mcpArgs = [...cliArgs, "mcp", "-p", projectPath || ".", "--transport", "http", "--port", String(actualPort)];
 
-    // Priority 2: derive from detected pythonPath (e.g. .../spec-editor2/.venv/bin/python).
-    // This is needed when the extension is installed from .vsix and the source
-    // lives in a separate repo. Without this, PYTHONPATH is not set and the MCP
-    // server may pick up conflicting modules from the workspace cwd (e.g. a
-    // workspace that also has src/storage.py would shadow spec-editor2's src/storage/).
-    if (!require("fs").existsSync(localServerPath)) {
-      const pythonDir: string = path.dirname(pythonPath2);
-      // Walk up from the Python binary looking for src/mcp/server.py
-      let candidate: string = pythonDir;
-      for (let i = 0; i < 6; i++) {
-        const candidateServer: string = path.join(candidate, "src", "mcp", "server.py");
-        if (require("fs").existsSync(candidateServer)) {
-          repoRoot = candidate;
-          localServerPath = candidateServer;
-          logEvent("INFO", `[spawnMcp] Found spec-editor2 repo via pythonPath: ${repoRoot}`);
-          break;
-        }
-        candidate = path.dirname(candidate);
-      }
-    }
-
-    const spawnCwd: string = require("fs").existsSync(localServerPath)
-      ? repoRoot
-      : workspaceRoot || process.cwd();
-
-    // ALWAYS set PYTHONPATH when we found the repo — otherwise cwd modules
-    // (from the workspace project) can shadow spec-editor2 source packages.
-    if (require("fs").existsSync(localServerPath)) {
-      envOverrides["PYTHONPATH"] = repoRoot;
-    }
-
-    logEvent(
-      "INFO",
-      `Spawning MCP using python=${pythonPath2} cwd=${spawnCwd} port=${actualPort}`,
-    );
-    if (envOverrides["PYTHONPATH"]) {
-      logEvent("INFO", `PYTHONPATH=${envOverrides["PYTHONPATH"]}`);
-    }
-
-    mcpProcess = spawn(pythonPath2, ["-c", serverCode], {
+    logEvent("INFO", `Spawning MCP: ${cliCmd} ${mcpArgs.join(" ")} port=${actualPort}`);
+    mcpProcess = spawn(cliCmd, mcpArgs, {
       stdio: ["pipe", "pipe", "pipe"],
-      cwd: spawnCwd,
       env: { ...process.env, ...envOverrides },
     });
 
@@ -2442,7 +2272,6 @@ async function startMcpServer(
   if (restorePath) {
     try {
       treeView.message = "Loading…";
-      await callMcp("switch_project", { path: restorePath });
       await treeProvider.loadElements();
       notifyWebView("projectLoaded");
       vscode.commands.executeCommand(
@@ -2571,7 +2400,6 @@ async function handleOpenProject(): Promise<void> {
   }
 
   treeView.message = "Loading…";
-  await callMcp("switch_project", { path: projectPath });
   treeProvider.loadElements();
   extensionContext.workspaceState.update("lastProject", projectPath);
   vscode.window.showInformationMessage(
@@ -2601,7 +2429,7 @@ async function handleNewProject(): Promise<void> {
 
   const terminal: vscode.Terminal =
     vscode.window.createTerminal("Spec Editor Init");
-  const cli = getSpecEditorCli();
+  const cli = resolveSpecEditorCli();
   const wsRoot: string =
     vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || ".";
   const projDir: string = path.join(wsRoot, name);
@@ -2717,29 +2545,22 @@ async function handleViewDiagram(elementId?: string): Promise<void> {
   logEvent("INFO", `viewDiagram: CALLED elementId=${elementId || "none"}`);
   await mcpReady;
 
+  // Always dispose old panel so the webview reloads with fresh HTML.
+  // Without this, VS Code restores the old webview from session cache
+  // and fixes (like webpack chunk path patching) never take effect.
   if (activePanel) {
-    activePanel.reveal(vscode.ViewColumn.Beside);
-    if (elementId) {
-      logEvent(
-        "INFO",
-        `viewDiagram: sending selectElement=${elementId} (panel=${!!activePanel})`,
-      );
-      activePanel.webview.postMessage({
-        type: "specEditor",
-        event: "selectElement",
-        elementId,
-        filterAspect: filterAspect || null,
-        filterRelation: filterRelation || null,
-      });
-    }
-    return;
+    const oldElementId = elementId;
+    activePanel.dispose();
+    activePanel = undefined;
+    // Store elementId so the new panel can select it after loading
+    elementId = oldElementId;
   }
 
   const panel: vscode.WebviewPanel = vscode.window.createWebviewPanel(
-    "specEditorDiagram",
+    "specEditorDiagramV2",
     "Spec Editor",
     vscode.ViewColumn.Beside,
-    { enableScripts: true, retainContextWhenHidden: true },
+    { enableScripts: true, retainContextWhenHidden: false },
   );
   activePanel = panel;
 
@@ -2825,51 +2646,89 @@ async function handleViewDiagram(elementId?: string): Promise<void> {
             message.body.params,
           );
         }
-        panel.webview.postMessage({ id: message.body.id, result });
+        panel.webview.postMessage({ id: message.id || message.body.id, result });
       } catch (err: any) {
         logEvent(
           "WARN",
           `[WebView MCP] ${message.body.method} FAILED: ${err.message}`,
         );
         panel.webview.postMessage({
-          id: message.body.id,
+          id: message.id || message.body.id,
           error: err.message,
         });
       }
     }
   });
 
-  const srcDir: vscode.Uri = vscode.Uri.joinPath(
-    extensionContext.extensionUri,
-    "dist",
-    "out",
+  // Build and set the webview HTML
+  const srcDir = vscode.Uri.joinPath(extensionContext.extensionUri, "dist", "out");
+  const frontendHtml = require("fs").readFileSync(
+    vscode.Uri.joinPath(srcDir, "index.html").fsPath, "utf-8",
   );
-  const frontendPath: vscode.Uri = vscode.Uri.joinPath(srcDir, "index.html");
-  let html: string = require("fs").readFileSync(frontendPath.fsPath, "utf-8");
-  const webviewBase: string = panel.webview.asWebviewUri(srcDir).toString();
+  const webviewBase = panel.webview.asWebviewUri(srcDir).toString();
+  const projectPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || "";
+  const html = buildWebviewHtml(frontendHtml, webviewBase, srcDir, panel,
+    extensionContext.extensionUri, elementId, projectPath);
+  require("fs").writeFileSync("/tmp/spec-editor-webview.html", html);
+  panel.webview.html = html;
+}
+
+/** Build the webview HTML with patched webpack runtime and bridge. */
+function buildWebviewHtml(
+  frontendHtml: string,
+  webviewBase: string,
+  srcDir: vscode.Uri,
+  panel: vscode.WebviewPanel,
+  extensionUri: vscode.Uri,
+  elementId: string | undefined,
+  projectPath: string,
+): string {
+  let html = frontendHtml;
+
+  // Rewrite /_next/ paths in the HTML to full webview resource URIs
   html = html.replace(/"\/_next\//g, `"${webviewBase}/_next/`);
   html = html.replace(/"\.\/_next\//g, `"${webviewBase}/_next/`);
 
-  const csp: string = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ${panel.webview.cspSource} 'unsafe-inline' https://cdn.jsdelivr.net; style-src ${panel.webview.cspSource} 'unsafe-inline'; img-src ${panel.webview.cspSource} data:; connect-src ${panel.webview.cspSource};">`;
-  html = html.replace("</head>", csp + "\n</head>");
-
-  const zoomCfg: vscode.WorkspaceConfiguration =
-    vscode.workspace.getConfiguration("specEditor");
-  const zoomSens: number = zoomCfg.get<number>("zoomSensitivity", 1);
-  const diagramEngine: string = zoomCfg.get<string>(
-    "diagramEngine",
-    "template",
+  // Inline the webpack runtime with .p hardcoded to the webview URI.
+  const wpMatch = html.match(
+    /<script[^>]*src="([^"]*webpack-[^"]*\.js)[^"]*"[^>]*><\/script>/,
   );
+  if (wpMatch) {
+    const wpRelPath = wpMatch[1].replace(webviewBase + "/_next/", "");
+    const wpFsPath = require("path").join(
+      srcDir.fsPath, "_next", wpRelPath.split("?")[0],
+    );
+    if (require("fs").existsSync(wpFsPath)) {
+      let wpJs = require("fs").readFileSync(wpFsPath, "utf-8");
+      const baseUrl = webviewBase + "/_next/";
+      wpJs = wpJs.replace(/\.p\s*=\s*"\/_next\/"/g, `.p=${JSON.stringify(baseUrl)}`);
+      wpJs = wpJs.replace(/\.p\s*=\s*""/g, `.p=${JSON.stringify(baseUrl)}`);
+      wpJs = wpJs.replace(
+        /var [a-z]=r\.p\+r\.u\([a-z]\)/,
+        `var o=${JSON.stringify(baseUrl)}+r.u(t)`,
+      );
+      wpJs = wpJs.replace(/<\/script>/gi, "<\\/script>");
+      html = html.replace(wpMatch[0], `<script>${wpJs}</script>`);
+    }
+  }
+
+  // CSP
+  html = html.replace("</head>",
+    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ${panel.webview.cspSource} 'unsafe-inline' https://cdn.jsdelivr.net; style-src ${panel.webview.cspSource} 'unsafe-inline'; img-src ${panel.webview.cspSource} data:; connect-src ${panel.webview.cspSource} http://127.0.0.1:8088 http://localhost:8088; frame-src http://localhost:3001 http://localhost:8088;">\n</head>`);
+
+  // Load the full-featured bridge.js (zoom, pan, fit-width, download SVG,
+  // node clicks, etc.) as an external script. Also provide __vscode_mcp
+  // fallback for old frontends if the bridge doesn't set it.
   const bridgeUri = panel.webview.asWebviewUri(
     vscode.Uri.joinPath(extensionContext.extensionUri, "dist", "bridge.js"),
   );
-  const projectPath: string =
-    vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || "";
-  const bridgeTag: string = `<script>var WINDOW_ZOOM_SENSITIVITY=${zoomSens};var DIAGRAM_ENGINE=${JSON.stringify(diagramEngine)};var INITIAL_ELEMENT=${JSON.stringify(elementId || null)};var FILTER_ASPECT=${JSON.stringify(filterAspect || null)};var FILTER_RELATION=${JSON.stringify(filterRelation || null)};var __SPEC_EDITOR_PROJECT_PATH__=${JSON.stringify(projectPath)};</script><script src="${bridgeUri}"></script>`;
-  html = html.replace("</head>", bridgeTag + "</head>");
+  const zoomCfg = vscode.workspace.getConfiguration("specEditor");
+  const mcpFallback = `(function(){var v=acquireVsCodeApi();var q={};window.addEventListener("message",function(e){var m=e.data;if(!m||m.id===undefined)return;var r=q[m.id];if(!r)return;delete q[m.id];if(m.result)r.resolve(m.result.result||m.result);else if(m.error)r.reject(new Error(m.error.message));else r.resolve({})});window.__vscode_mcp=function(m,p){return new Promise(function(res,rej){var id="mcp-"+Date.now()+"-"+Math.random().toString(36).slice(2,8);q[id]={resolve:res,reject:rej};v.postMessage({type:"mcp",body:{jsonrpc:"2.0",id:1,method:m,params:p||{}},id:id});setTimeout(function(){if(q[id]){delete q[id];rej(new Error("MCP timeout"))}},30000)})}})();`;
 
-  require("fs").writeFileSync("/tmp/spec-editor-webview.html", html);
-  panel.webview.html = html;
+  html = html.replace("</head>",
+    `<script>var WINDOW_ZOOM_SENSITIVITY=${zoomCfg.get("zoomSensitivity",1)};var DIAGRAM_ENGINE=${JSON.stringify(zoomCfg.get("diagramEngine","template"))};var INITIAL_ELEMENT=${JSON.stringify(elementId||null)};var FILTER_ASPECT=${JSON.stringify(filterAspect||null)};var FILTER_RELATION=${JSON.stringify(filterRelation||null)};var __SPEC_EDITOR_PROJECT_PATH__=${JSON.stringify(projectPath)};var __SPEC_EDITOR_MCP_PORT__=8088;</script><script src="${bridgeUri}"></script><script>if(!window.__vscode_mcp){${mcpFallback}}</script></head>`);
+
+  return html;
 }
 
 async function handleValidate(): Promise<void> {

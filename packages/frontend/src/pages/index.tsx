@@ -56,6 +56,7 @@ export default function Home() {
   const diagramTypes = [
     { name: "graph", label: "Graph" },
     { name: "flowchart", label: "Flowchart" },
+    { name: "kanban", label: "Kanban Board", aspect: "sources" },
     { name: "sequence", label: "Sequence" },
     { name: "class", label: "Class" },
     { name: "er", label: "ER" },
@@ -346,7 +347,10 @@ export default function Home() {
           {/* Diagram type selector */}
           <div className="diagram-types">
             {diagramTypes
-              .filter((dt) => validTypes.size === 0 || validTypes.has(dt.name))
+              .filter((dt) => {
+                if (validTypes.size === 0) return !dt.aspect || dt.aspect === diagramAspect;
+                return validTypes.has(dt.name) && (!dt.aspect || dt.aspect === diagramAspect);
+              })
               .map((dt) => (
                 <button
                   key={dt.name}
@@ -374,7 +378,13 @@ export default function Home() {
           {/* Center: Diagram */}
           <div className="panel-center">
             <div className="diagram-area">
-              {diagramAspect && (
+              {activeDiagramType === "kanban" && diagramAspect ? (
+                <iframe
+                  src="http://localhost:3001/boards/1812454409947317260"
+                  style={{ width: "100%", height: "100%", border: "none", borderRadius: "8px" }}
+                  title="Planka Kanban Board"
+                />
+              ) : diagramAspect ? (
                 <MermaidDiagram
                   key={refreshKey}
                   aspect={diagramAspect}
@@ -383,8 +393,7 @@ export default function Home() {
                   filterRelation={initFilterRelation}
                   onNodeClick={handleNodeClick}
                 />
-              )}
-              {!diagramAspect && (
+              ) : (
                 <div className="empty-state">
                   <p>
                     Select an aspect above to generate a diagram, or click an
