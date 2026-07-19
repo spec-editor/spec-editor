@@ -1,0 +1,141 @@
+project_path: /Users/dmitry/Documents/Droid/spec-editor2
+project_slug: spec-editor
+queue_url: redis://localhost:6379
+mcp:
+  transport: stdio
+  socket: /tmp/spec-editor.sock
+  port: 8001
+llm:
+  provider: deepseek
+  model: deepseek/deepseek-reasoner
+
+# ============================================================================
+# Channels — external integrations
+# ============================================================================
+channels:
+  - type: plankanban
+    name: agile-board
+    kind: tracker
+    enabled: true
+    config:
+      url: "http://localhost:3001"
+      token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IjU0ODBmYTYwLTE0OWUtNDQ1Ni1iY2Q3LWUyNmE1MTQ0MTU3MSJ9.eyJpYXQiOjE3ODMyNTM1MDksImV4cCI6MTgxNDc4OTUwOSwic3ViIjoiMTgxMjQyMTY4NDA4MzI5NTIzMyJ9.RFpr-ZVGapHgfJgdN2RA2oyA0YDq0JcGwebX_G7NwxI"
+      board_id: "1812454409947317260"
+    mapping:
+      status:
+        "Backlog": draft
+        "In Progress": dispatched
+        "Done": confirmed
+      labels:
+        - "spec-editor"
+    response:
+      comment_on: ["code_generated", "deployed"]
+
+# ============================================================================
+# Pluggable subsystem backends
+# ============================================================================
+# Each section supports: backend: <name> plus backend-specific config.
+# All backends default to sensible local-first options.
+
+# -- Secrets Provider ---------------------------------------------------------
+# Resolves API keys, passwords, tokens.
+# Backends: env (default) | aws_secrets | vault | noop
+#
+# secrets:
+#   backend: env
+#   # aws_secrets:
+#   #   region: us-east-1
+#   #   secret_id: spec-editor
+#   # vault:
+#   #   addr: https://vault.example.com
+#   #   mount_point: secret
+
+# -- Event Bus ----------------------------------------------------------------
+# Inter-component pub/sub messaging.
+# Backends: redis (default) | memory | nats
+#
+# events:
+#   backend: redis
+#   redis:
+#     url: redis://localhost:6379
+#   # nats:
+#   #   url: nats://localhost:4222
+
+# -- Notifications ------------------------------------------------------------
+# Sends alerts on lifecycle events (spec created, bug found, deploy done).
+# Backends: log (default) | slack | telegram | email
+#
+# notifications:
+#   backend: log
+#   # slack:
+#   #   webhook_url: ${SLACK_WEBHOOK_URL}
+#   # telegram:
+#   #   bot_token: ${TELEGRAM_BOT_TOKEN}
+#   #   chat_id: ${TELEGRAM_CHAT_ID}
+#   # email:
+#   #   smtp_host: smtp.example.com
+#   #   smtp_port: 587
+#   #   smtp_user: ${SMTP_USER}
+#   #   smtp_password: ${SMTP_PASSWORD}
+#   #   from: spec-editor@example.com
+#   #   to: [team@example.com]
+
+# -- Auth Provider ------------------------------------------------------------
+# Access control for multi-user / enterprise deployments.
+# Backends: noop (default, allow all) | casbin | openfga
+#
+# auth:
+#   backend: noop
+#   # casbin:
+#   #   policy: |
+#   #     p, admin, *, *, *
+#   #     p, analyst, spec-editor, aspect:*, read
+#   #     p, developer, spec-editor, MOD-001, write
+#   #     g, alice, admin, spec-editor
+#   #     g, bob, developer, spec-editor
+#   # openfga:
+#   #   api_url: http://localhost:8080
+#   #   store_id: ${OPENFGA_STORE_ID}
+#   #   model_id: ${OPENFGA_MODEL_ID}
+
+# -- Coding Templates ---------------------------------------------------------
+# Code generation template engine.
+# Backends: none (default, raw LLM) | jinja2 | copier
+#
+# templates:
+#   backend: none
+#   # jinja2:
+#   #   templates_dir: ./templates/
+#   # copier:
+#   #   source: gh:acme-corp/python-hexagonal-template
+#   # element_templates:
+#   #   MOD-*: "module_service.py.jinja"
+#   #   ENT-*: "domain_entity.py.jinja"
+
+# -- Architecture Enforcement -------------------------------------------------
+# CI gate that verifies generated code follows the architectural pattern.
+# Backends: pytest (default, AST-based, no deps) | pytest_arch | import_linter | none
+#
+# enforcement:
+#   backend: pytest
+#   strict: true
+#   auto_generate: true
+
+# -- License -------------------------------------------------------------------
+# License key management for Pro and Cloud tiers.
+# Backends: noop (default, Free tier) | gumroad | file
+#
+# license:
+#   backend: gumroad                          # noop | gumroad | file
+#   key: ""                                   # GumRoad license key (XXXX-XXXX-XXXX-XXXX)
+#   product_id: ""                            # GumRoad product permalink ID
+#   cloud_token_key: ""                       # Cloud token key for LLM proxy metering
+#   cloud_proxy_url: ""                       # Cloud proxy base URL (e.g. https://proxy.example.com)
+#   cache_path: "~/.spec-editor/license.cache"
+#   cache_ttl_days: 7                         # Cache successful validations for 7 days
+#   offline_validation: false                 # Never hit network — use cache or fail
+#
+#   # File-based offline validation (air-gapped deployments):
+#   # backend: file
+#   # file_path: "./.license"
+#   # public_key: ""                          # Ed25519 public key (base64)

@@ -79,6 +79,12 @@ def _check_docker() -> bool:
         return False
 
 
+def _check_code_available() -> bool:
+    """Check if VSCode CLI is available."""
+    import shutil
+    return shutil.which("code") is not None
+
+
 def _check_project_initialized(project_path: Path) -> bool:
     """Check if a spec-editor project is already initialized."""
     return (project_path / "methodology.yaml").exists()
@@ -302,11 +308,24 @@ def init(
     table.add_column("Description", style="dim")
 
     table.add_row("A) CLI", f"cd {path} && spec-editor run", "Run the full cycle pipeline")
-    table.add_row("B) VSCode", "Install spec-editor extension", "GUI with diagrams, tree, validation")
+    table.add_row("B) VSCode", "spec-editor install-vscode", "GUI with diagrams, tree, validation")
     table.add_row("C) Web UI", "http://localhost:3000", "Browser-based interface") if use_web_ui else None
     table.add_row("Analyze", f"spec-editor analyze -t \"...\"", "Quick requirement analysis")
     table.add_row("Status", f"spec-editor status", "View project state")
     console.print(table)
+
+    # Auto-install VSCode extension if code CLI is available
+    if _check_code_available():
+        console.print("\n[bold]VSCode detected![/bold] Installing extension...")
+        try:
+            result = subprocess.run(
+                ["spec-editor", "install-vscode"],
+                capture_output=True, text=True, timeout=30,
+            )
+            if result.returncode == 0:
+                console.print("[green]VSCode extension installed. Reload window to activate.[/green]")
+        except Exception:
+            pass  # silent — user can run manually
 
     if not is_reinit:
         console.print("\n[bold]Quick start:[/bold]")
