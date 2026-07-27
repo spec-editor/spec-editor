@@ -22,6 +22,10 @@ Unlike passive docs, this memory is alive — AI agents continuously debate,
 cross-reference, and evolve the project knowledge.
 
 ```bash
+# One-liner install (macOS / Linux):
+curl -sSL https://raw.githubusercontent.com/spec-editor/spec-editor/main/install.sh | bash
+
+# Or via pip (requires Python 3.11+):
 pip install spec-editor && spec-editor init --with-example && spec-editor run
 ```
 

@@ -198,17 +198,17 @@ def demo(output: str | None) -> None:
         agents_yaml.write_text("""agents:
   agent_1:
     provider: deepseek
-    model: deepseek/deepseek-reasoner
+    model: deepseek/deepseek-v4-pro
     temperature: 0.7
     max_tokens: 4096
   agent_2:
     provider: deepseek
-    model: deepseek/deepseek-reasoner
+    model: deepseek/deepseek-v4-pro
     temperature: 0.7
     max_tokens: 4096
   orchestrator:
     provider: deepseek
-    model: deepseek/deepseek-reasoner
+    model: deepseek/deepseek-v4-pro
     temperature: 0.3
     max_tokens: 4096
 max_rounds: 20

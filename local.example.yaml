@@ -27,7 +27,7 @@ mcp:
 # ============================================================================
 llm:
   provider: deepseek              # deepseek | openai | anthropic | ollama
-  model: deepseek/deepseek-reasoner
+  model: deepseek/deepseek-v4-pro
 
 # ============================================================================
 # Secrets Provider — where API keys are resolved from

@@ -70,7 +70,7 @@ OUTPUT_TRUNCATE = 500            # truncate OpenCode output in failure notes
 # Default LLM model (fallback when agents.yaml is unavailable)
 # ──────────────────────────────────────────────────────────────────
 
-DEFAULT_REASONING_MODEL = "deepseek/deepseek-reasoner"
+DEFAULT_REASONING_MODEL = "deepseek/deepseek-v4-pro"
 DEFAULT_CHAT_MODEL = "deepseek/deepseek-chat"
 
 # ──────────────────────────────────────────────────────────────────

@@ -343,22 +343,22 @@ class SupervisorGraph:
             if self._user_ci_threshold is not None:
                 ci_threshold = self._user_ci_threshold
             else:
+                # Dynamic threshold based on spec size and complexity
                 num_elements = max(metrics.get("total_elements", 0), 10)
-                ci_threshold = round(2.0 + math.log(max(num_elements, 10)) * 0.35, 2)
-                ci_threshold = max(2.0, min(ci_threshold, 3.5))
-
-            # Accept completion if: CI meets threshold, OR agents stuck without improvement
-            ci_ok = connectivity >= ci_threshold
-            stuck = stale_count >= STALE_LIMIT and orphans == 0 and unparented == 0
-
-            if orphans == 0 and unparented == 0 and (ci_ok or stuck):
+                num_aspects = max(
+                    len([a for a, c in metrics.get("aspects", {}).items() if c > 0]), 2
+                )
+                # Base: 2.5 for small specs, scaled by log of element count
+                # Larger specs need more connections to be considered "complete"
+                ci_threshold = round(2.5 + math.log(max(num_elements, 10)) * 0.5, 2)
+                # Floor at 2.5, cap at 5.0 — beyond this, diminishing returns
+                ci_threshold = max(2.5, min(ci_threshold, 5.0))
+            if orphans == 0 and unparented == 0 and connectivity >= ci_threshold:
                 logger.info(
                     "supervisor_report_complete_verified",
                     ci=connectivity,
                     threshold=ci_threshold,
                     unparented=unparented,
-                    stale_count=stale_count,
-                    stuck=stuck,
                 )
                 return {"status": "complete"}
             else:
@@ -368,7 +368,6 @@ class SupervisorGraph:
                     unparented=unparented,
                     ci=connectivity,
                     threshold=ci_threshold,
-                    stale_count=stale_count,
                 )
 
         # ── Decide which agents to activate ──
@@ -551,7 +550,7 @@ class SupervisorGraph:
 
         # Add task message to shared bus immediately so sibling sees it
         if task:
-            shared_messages.append({"role": "user", "content": task})
+            shared_messages.append({"role": "user", "content": task, "_agent": agent_name})
 
         while calls_this_round < max_calls_this_round:
             # Check team-level hard limit (shared budget)
@@ -567,8 +566,12 @@ class SupervisorGraph:
                 Message(role=MessageRole.SYSTEM, content=system_prompt)
             ]
 
-            # Previous rounds' messages
+            # Previous rounds' messages — filtered for THIS agent only
             for m in state["messages"]:
+                # Skip messages from the OTHER agent (to keep thinking-mode context pure)
+                msg_agent = m.get("_agent", "")
+                if msg_agent and msg_agent != agent_name:
+                    continue
                 role = MessageRole(m["role"])
                 tc_list = None
                 if "tool_calls" in m:
@@ -576,15 +579,20 @@ class SupervisorGraph:
                 provider_messages.append(
                     Message(
                         role=role,
-                        content=m.get("content", ""),
+                        content=m.get("content") or "",
                         tool_calls=tc_list,
                         tool_call_id=m.get("tool_call_id"),
+                        reasoning_content=m.get("reasoning_content"),
                     )
                 )
 
             # Real-time shared messages from BOTH agents this round
-            # Take a snapshot to avoid race conditions during iteration
-            snapshot = list(shared_messages)
+            # Take a snapshot to avoid race conditions during iteration.
+            # Filter to only include messages from THIS agent — DeepSeek thinking
+            # mode requires reasoning_content on the LAST assistant message, and
+            # mixing Agent 2's non-thinking messages breaks this.
+            snapshot = [m for m in shared_messages
+                        if m.get("_agent", agent_name) == agent_name]
             for m in snapshot:
                 role = MessageRole(m["role"])
                 tc_list = None
@@ -593,9 +601,10 @@ class SupervisorGraph:
                 provider_messages.append(
                     Message(
                         role=role,
-                        content=m.get("content", ""),
+                        content=m.get("content") or "",
                         tool_calls=tc_list,
                         tool_call_id=m.get("tool_call_id"),
+                        reasoning_content=m.get("reasoning_content"),
                     )
                 )
 
@@ -608,7 +617,7 @@ class SupervisorGraph:
             except Exception as exc:
                 logger.error(f"{agent_name}_llm_error", error=str(exc))
                 shared_messages.append(
-                    {"role": "assistant", "content": f"Error: {exc}"}
+                    {"role": "assistant", "content": f"Error: {exc}", "_agent": agent_name}
                 )
                 break
 
@@ -629,11 +638,15 @@ class SupervisorGraph:
             assistant_msg: dict = {
                 "role": "assistant",
                 "content": response.content or "",
+                "_agent": agent_name,  # tag for per-agent message filtering
             }
             if response.tool_calls:
                 assistant_msg["tool_calls"] = [
                     tc.model_dump() for tc in response.tool_calls
                 ]
+            # Preserve reasoning_content — DeepSeek thinking mode requires it back
+            if response.reasoning_content:
+                assistant_msg["reasoning_content"] = response.reasoning_content
 
             # Write to shared bus — sibling agent will see this on its next LLM call
             shared_messages.append(assistant_msg)
@@ -684,6 +697,7 @@ class SupervisorGraph:
                         "role": "tool",
                         "content": json.dumps(result, ensure_ascii=False, default=str),
                         "tool_call_id": tc.id,
+                        "_agent": agent_name,
                     }
                 )
 
@@ -707,7 +721,7 @@ class SupervisorGraph:
                         f"CI={ms.connectivity_index:.2f}, "
                         f"orphans={ms.orphan_elements}"
                     )
-                    shared_messages.append({"role": "user", "content": summary})
+                    shared_messages.append({"role": "user", "content": summary, "_agent": agent_name})
                 except Exception:
                     pass
 
@@ -944,9 +958,10 @@ class SupervisorGraph:
                 provider_messages.append(
                     Message(
                         role=role,
-                        content=m.get("content", ""),
+                        content=m.get("content") or "",
                         tool_calls=tc_list,
                         tool_call_id=m.get("tool_call_id"),
+                        reasoning_content=m.get("reasoning_content"),
                     )
                 )
 
@@ -959,9 +974,10 @@ class SupervisorGraph:
                 provider_messages.append(
                     Message(
                         role=role,
-                        content=m.get("content", ""),
+                        content=m.get("content") or "",
                         tool_calls=tc_list,
                         tool_call_id=m.get("tool_call_id"),
+                        reasoning_content=m.get("reasoning_content"),
                     )
                 )
 
@@ -996,6 +1012,9 @@ class SupervisorGraph:
                 assistant_msg["tool_calls"] = [
                     tc.model_dump() for tc in response.tool_calls
                 ]
+            # Preserve reasoning_content — DeepSeek thinking mode requires it back
+            if response.reasoning_content:
+                assistant_msg["reasoning_content"] = response.reasoning_content
 
             local_messages.append(assistant_msg)
 

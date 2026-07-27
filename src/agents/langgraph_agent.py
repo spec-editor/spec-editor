@@ -152,7 +152,7 @@ class LangGraphAgent(AgentProvider):
 
         last = result.get("last_response", {})
         return AgentRunResult(
-            content=last.get("content", ""),
+            content=last.get("content") or "",
             tool_calls=last.get("tool_calls", []),
         )
 
@@ -207,9 +207,10 @@ class LangGraphAgent(AgentProvider):
             provider_messages.append(
                 Message(
                     role=role,
-                    content=m.get("content", ""),
+                    content=m.get("content") or "",
                     tool_calls=tc_list,
                     tool_call_id=m.get("tool_call_id"),
+                    reasoning_content=m.get("reasoning_content"),
                 )
             )
 

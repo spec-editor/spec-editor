@@ -279,17 +279,19 @@ class LiteLLMProvider(LLMProvider):
     def _convert_messages(messages: list[Message]) -> list[dict[str, Any]]:
         result: list[dict[str, Any]] = []
         for msg in messages:
-            # Skip assistant messages with no content AND no tool_calls —
-            # DeepSeek/OpenAI APIs reject these with "Invalid assistant message"
+            # Skip assistant messages that have literally nothing:
+            # no content, no tool_calls, no reasoning_content.
+            # content="" (empty string) is NOT skipped — it's a valid response.
             if (
                 msg.role.value == "assistant"
-                and not msg.content
+                and msg.content is None
                 and not msg.tool_calls
+                and msg.reasoning_content is None
             ):
                 continue
             entry: dict[str, Any] = {"role": msg.role.value}
-            if msg.content:
-                entry["content"] = msg.content
+            # Always include content field — DeepSeek API requires it even when empty
+            entry["content"] = msg.content or ""
             if msg.tool_call_id is not None:
                 entry["tool_call_id"] = msg.tool_call_id
             if msg.tool_calls:
