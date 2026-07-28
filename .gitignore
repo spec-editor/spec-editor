@@ -121,7 +121,7 @@ deploy.yaml
 # ──────────────────────────────────────────────────────────────
 paid-methodologies/
 cloud-proxy/                              # Cloud token proxy backend (paid)
-plugins/cycle/                            # Pro multi-agent codegen plugin (paid)
+plugins/cycle/
 src/licensing/gumroad.py                  # GumRoad API integration (paid)
 
 # ──────────────────────────────────────────────────────────────
