@@ -1097,11 +1097,11 @@ status: ${el.status || "draft"}
       statusBar.tooltip = "Reengineer is running — click to stop";
       statusBar.color = new vscode.ThemeColor("statusBarItem.warningForeground");
       runTerminal.sendText(
-        `${cli} run --reengineer -p "${wsRoot}"`,
+        `${cli} run --reengineer -c "${wsRoot}" -p "${wsRoot}"`,
       );
       runTerminal.show();
       outputChannel.info(
-        `[Reengineer] ${cli} run --reengineer -p "${wsRoot}"`,
+        `[Reengineer] ${cli} run --reengineer -c "${wsRoot}" -p "${wsRoot}"`,
       );
       logEvent("INFO", `specEditor.reengineer: started`);
     }),

@@ -588,6 +588,12 @@ def install_vscode() -> None:
     is_flag=True,
     help="Reverse-engineer existing codebase into specification elements (code→spec mode).",
 )
+@click.option(
+    "--code-dir",
+    "-c",
+    default=None,
+    help="Directory containing code to reverse-engineer (default: project path). Only with --reengineer.",
+)
 def run(
     path: str,
     max_rounds: int | None,
@@ -599,6 +605,7 @@ def run(
     output_dir: str | None,
     ci: float | None,
     reengineer: bool = False,
+    code_dir: str | None = None,
 ) -> None:
     """Launch analytics + coding teams to refine requirements and generate code.
 
@@ -784,7 +791,13 @@ def run(
     if not initial_task:
         if reengineer:
             # ── Reengineer mode: scan codebase → create spec elements ──
-            from src.agents.persistent_agent import AgentWorker
+            # Default code_dir = original unresolved path (project root, not spec-editor subfolder)
+            _default_code_dir = Path(path).resolve()
+            reengineer_code_dir = Path(code_dir).resolve() if code_dir else _default_code_dir
+            if code_dir:
+                console.print(f"[dim]Code directory: {reengineer_code_dir}[/dim]")
+            else:
+                console.print(f"[dim]Code directory (default): {reengineer_code_dir}[/dim]")
             # Build methodology summary for the task
             method_summary = ""
             aspects_desc = []
@@ -797,7 +810,7 @@ def run(
                 + "\n".join(aspects_desc) + "\n"
             )
             initial_task = (
-                f"Reverse-engineer the codebase at {project_path} into specification elements.\n\n"
+                f"Reverse-engineer the codebase at {reengineer_code_dir} into specification elements.\n\n"
                 f"{method_summary}\n"
                 f"## PHASES TO EXECUTE:\n"
                 f"  Phase 1 (STRUCTURE): get_file_tree → create module + entity + field elements.\n"
@@ -821,7 +834,7 @@ def run(
                 f"- Agent 1 creates elements, Agent 2 links them.\n"
                 f"- After ALL phases, report: elements created per aspect, relationships created."
             )
-            console.print(f"[bold]Reengineer mode[/bold] — scanning {project_path}")
+            console.print(f"[bold]Reengineer mode[/bold] — scanning {reengineer_code_dir}")
         else:
             source_dir = project_path / "source"
             all_elements = storage.list_all()
@@ -1032,13 +1045,16 @@ def run(
         # ── Reengineer mode: add code-analysis handlers ──
         if reengineer:
             from src.agents.persistent_agent import AgentWorker
-            _worker = AgentWorker(role="reengineer", project_path=str(project_path))
+            # Use code_dir for scanning tools (default = project root, not spec-editor subfolder)
+            _default_code_dir = Path(path).resolve()
+            reengineer_code_dir = Path(code_dir).resolve() if code_dir else _default_code_dir
+            _code_worker = AgentWorker(role="reengineer", project_path=str(reengineer_code_dir))
             if "get_file_tree" not in handlers1:
-                handlers1["get_file_tree"] = _worker._tool_get_file_tree
+                handlers1["get_file_tree"] = _code_worker._tool_get_file_tree
             if "search_code" not in handlers1:
-                handlers1["search_code"] = _worker._tool_search_code
+                handlers1["search_code"] = _code_worker._tool_search_code
             if "read_file" not in handlers1:
-                handlers1["read_file"] = _worker._tool_read_file
+                handlers1["read_file"] = _code_worker._tool_read_file
             # Remove source-document handler
             handlers1.pop("read_source_document", None)
 
