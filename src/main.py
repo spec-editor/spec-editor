@@ -583,6 +583,11 @@ def install_vscode() -> None:
     type=float,
     help="Minimum connectivity index required to proceed (0.0–∞, e.g. 0.9)",
 )
+@click.option(
+    "--reengineer",
+    is_flag=True,
+    help="Reverse-engineer existing codebase into specification elements (code→spec mode).",
+)
 def run(
     path: str,
     max_rounds: int | None,
@@ -593,6 +598,7 @@ def run(
     dry_run_incremental: bool,
     output_dir: str | None,
     ci: float | None,
+    reengineer: bool = False,
 ) -> None:
     """Launch analytics + coding teams to refine requirements and generate code.
 
@@ -603,6 +609,11 @@ def run(
     import os
 
     project_path = Path(path).resolve()
+    # Resolve spec-editor subfolder if methodology.yaml is in spec-editor/
+    from src.config.engine import resolve_project_path
+    resolved = resolve_project_path(project_path)
+    if resolved is not None:
+        project_path = resolved
     lock_file = project_path / ".spec-editor-running"
 
     # ── Check for existing running process ──
@@ -759,138 +770,177 @@ def run(
     _validate_before_run(storage, method, project_path)
 
     # ── Detect language from source documents ──
-    detected_lang = _auto_detect_language(project_path, settings)
-
-    # Reload methodology in detected language for agents
-    if detected_lang == "ru":
-        from src.config._data_path import data_path
-
-        ru_path = data_path("methodologies") / "waterfall-ru.yaml"
-        if ru_path.exists():
-            method = load_methodology(ru_path)
-            console.print("[dim]Using Russian methodology (waterfall-ru.yaml)[/dim]")
+    if not reengineer:
+        detected_lang = _auto_detect_language(project_path, settings)
+        if detected_lang == "ru":
+            from src.config._data_path import data_path
+            ru_path = data_path("methodologies") / "waterfall-ru.yaml"
+            if ru_path.exists():
+                method = load_methodology(ru_path)
+                console.print("[dim]Using Russian methodology (waterfall-ru.yaml)[/dim]")
 
     # Determine the task: explicit, from source/*.md, or default
     initial_task = task
     if not initial_task:
-        source_dir = project_path / "source"
-        all_elements = storage.list_all()
-        if not all_elements and source_dir.is_dir():
-            sources = sorted(
-                list(source_dir.glob("*.md")) + list(source_dir.glob("*.txt")),
-                key=lambda f: f.stat().st_mtime,
+        if reengineer:
+            # ── Reengineer mode: scan codebase → create spec elements ──
+            from src.agents.persistent_agent import AgentWorker
+            # Build methodology summary for the task
+            method_summary = ""
+            aspects_desc = []
+            for a in method.aspects:
+                types_desc = ", ".join(f"{et.name}({et.title})" for et in a.element_types)
+                aspects_desc.append(f"  - {a.name} ({a.title}): [{types_desc}]")
+            method_summary = (
+                f"## METHODOLOGY: {method.name} v{method.version}\n"
+                f"Available aspects and element types:\n"
+                + "\n".join(aspects_desc) + "\n"
             )
-            if sources:
-                parts = []
-                for src_file in sources:
-                    parts.append(
-                        f"### {src_file.name}\n{src_file.read_text(encoding='utf-8').strip()}"
-                    )
-                project_desc = "\n\n".join(parts)
-                initial_task = (
-                    "Develop requirements according to the methodology.\n\n"
-                    f"Target system description:\n{project_desc}\n\n"
-                    "Start by analysing the description and create a basic requirements structure "
-                    "across all aspects of the methodology."
-                )
-                console.print(
-                    f"[dim]Task loaded from source/ ({len(sources)} files)[/dim]\n"
-                )
+            initial_task = (
+                f"Reverse-engineer the codebase at {project_path} into specification elements.\n\n"
+                f"{method_summary}\n"
+                f"## PHASES TO EXECUTE:\n"
+                f"  Phase 1 (STRUCTURE): get_file_tree → create module + entity + field elements.\n"
+                f"  Phase 2 (DEVOPS): Find Dockerfiles, CI configs, build scripts → create implementation elements.\n"
+                f"  Phase 3 (API): search_code for route decorators → create endpoint elements (aspect=user_interface).\n"
+                f"  Phase 4 (UI): Find .tsx/.vue/.html files → create screen elements (aspect=user_interface).\n\n"
+                f"## CRITICAL: ENTITY + FIELD STRUCTURE (MUST FOLLOW)\n"
+                f"For EVERY data model found in code, create TWO kinds of elements:\n"
+                f"  1. ENTITY (element_type=entity): describes the model purpose.\n"
+                f"     write_element(id='ENT-001', aspect='data_entities', element_type='entity', title='User', content='Stores user accounts. Table: users')\n"
+                f"  2. FIELD (element_type=field, parent=ENTITY_ID): one per column/property.\n"
+                f"     write_element(aspect='data_entities', element_type='field', parent='ENT-001', title='email', content='Type: varchar(255), Required: true, Unique: true')\n"
+                f"     write_element(aspect='data_entities', element_type='field', parent='ENT-001', title='name', content='Type: varchar(100), Required: true')\n"
+                f"  3. LINK: add_relationship(source_id='ENT-001', rel_type='consists_of', target_id='FLD-001') for each field.\n"
+                f"  NEVER put field descriptions as text in entity content. ALWAYS create separate field elements.\n\n"
+                f"## OTHER RULES:\n"
+                f"- ALL elements MUST have status=confirmed.\n"
+                f"- Add provenance_source='file:line' for EVERY element.\n"
+                f"- ALWAYS call search_elements BEFORE write_element to avoid duplicates.\n"
+                f"- Work PHASE BY PHASE — complete one phase before starting the next.\n"
+                f"- Agent 1 creates elements, Agent 2 links them.\n"
+                f"- After ALL phases, report: elements created per aspect, relationships created."
+            )
+            console.print(f"[bold]Reengineer mode[/bold] — scanning {project_path}")
         else:
-            # Build a specific task listing which aspects need coverage
-            from collections import Counter
-
-            aspect_counts = Counter(s.aspect for s in all_elements)
-            method_aspects = {a.name: a.title for a in method.aspects}
-            missing = [a for a in method_aspects if a not in aspect_counts]
-            existing_str = ", ".join(
-                f"{a} ({aspect_counts.get(a, 0)})" for a in method_aspects
-            )
-
-            if missing:
-                missing_str = "\n".join(
-                    f"  - {a} ({method_aspects[a]}) — 0 elements, CREATE FIRST"
-                    for a in missing
+            source_dir = project_path / "source"
+            all_elements = storage.list_all()
+            if not all_elements and source_dir.is_dir():
+                sources = sorted(
+                    list(source_dir.glob("*.md")) + list(source_dir.glob("*.txt")),
+                    key=lambda f: f.stat().st_mtime,
                 )
-                initial_task = (
-                    f"Current specification: {sum(aspect_counts.values())} elements. "
-                    f"Aspects: {existing_str}.\n\n"
-                    f"MISSING ASPECTS — create elements for these IMMEDIATELY:\n"
-                    f"{missing_str}\n\n"
-                    f"For EACH missing aspect, read the source documents and "
-                    f"create specification elements with write_element. "
-                    f"Do NOT call run_validate or run_metrics until you have "
-                    f"created elements for ALL missing aspects. "
-                    f"After all aspects have elements, then validate and refine."
-                )
-            else:
-                # Build task from methodology: find under-represented relationship types
-                rel_counts = Counter()
-                for s in all_elements:
-                    try:
-                        full = storage.read_element(s.id)
-                        for rt in full.relationships or {}:
-                            rel_counts[rt] += len(full.relationships[rt])
-                    except Exception:
-                        pass
-
-                # Collect all cross-aspect relationship types from methodology
-                cross_aspect_rels = {}
-                for aspect in method.aspects:
-                    for rt in aspect.relationship_types or []:
-                        cross_aspect_rels[rt.name] = {
-                            "title": rt.title,
-                            "sources": rt.source_aspects,
-                            "targets": rt.target_aspects,
-                        }
-
-                # Find missing or sparse relationship types
-                sparse = []
-                for rname, rinfo in cross_aspect_rels.items():
-                    count = rel_counts.get(rname, 0)
-                    if count == 0:
-                        sparse.append((rname, rinfo, "MISSING"))
-                    elif (
-                        rname
-                        in (
-                            "interacts_with",
-                            "applies_to",
-                            "implements",
-                            "measures",
-                            "references",
+                if sources:
+                    parts = []
+                    for src_file in sources:
+                        parts.append(
+                            f"### {src_file.name}\n{src_file.read_text(encoding='utf-8').strip()}"
                         )
-                        and count < 5
-                    ):
-                        sparse.append((rname, rinfo, f"only {count}"))
-
-                if sparse:
-                    lines = []
-                    skill_map = {
-                        "refines": "scenario_decomposer",
-                        "next_step": "scenario_decomposer",
-                        "navigates_to": "ui_navigator",
-                        "contains": "metrics_linker",
-                        "triggers_on": "metrics_linker",
-                    }
-                    for rname, rinfo, status in sparse:
-                        src = ", ".join(rinfo["sources"])
-                        tgt = ", ".join(rinfo["targets"])
-                        skill = skill_map.get(rname, "")
-                        hint = f" (spawn {skill} helper)" if skill else ""
-                        lines.append(f"  {rname}: {status} — {src} → {tgt}{hint}")
-                    task_lines = "\n".join(lines)
+                    project_desc = "\n\n".join(parts)
                     initial_task = (
-                        f"All methodology aspects have elements: {existing_str}.\n\n"
-                        f"FILL MISSING RELATIONSHIPS. Spawn helpers via request_helper:\n"
-                        f"{task_lines}\n\n"
-                        f"Delegate work to helpers with request_helper(role=skill_name, task=...). "
-                        f"Each helper has a specialized prompt for its relationship type."
+                        "Develop requirements according to the methodology.\n\n"
+                        f"Target system description:\n{project_desc}\n\n"
+                        "Start by analysing the description and create a basic requirements structure "
+                        "across all aspects of the methodology."
+                    )
+                    console.print(
+                        f"[dim]Task loaded from source/ ({len(sources)} files)[/dim]\n"
+                    )
+            else:
+                # Build a specific task listing which aspects need coverage
+                from collections import Counter
+
+                aspect_counts = Counter(s.aspect for s in all_elements)
+                method_aspects = {a.name: a.title for a in method.aspects}
+                missing = [a for a in method_aspects if a not in aspect_counts]
+                existing_str = ", ".join(
+                    f"{a} ({aspect_counts.get(a, 0)})" for a in method_aspects
+                )
+
+                if missing:
+                    missing_str = "\n".join(
+                        f"  - {a} ({method_aspects[a]}) — 0 elements, CREATE FIRST"
+                        for a in missing
+                    )
+                    initial_task = (
+                        f"Current specification: {sum(aspect_counts.values())} elements. "
+                        f"Aspects: {existing_str}.\n\n"
+                        f"MISSING ASPECTS — create elements for these IMMEDIATELY:\n"
+                        f"{missing_str}\n\n"
+                        f"For EACH missing aspect, read the source documents and "
+                        f"create specification elements with write_element. "
+                        f"Do NOT call run_validate or run_metrics until you have "
+                        f"created elements for ALL missing aspects. "
+                        f"After all aspects have elements, then validate and refine."
                     )
                 else:
-                    initial_task = (
-                        f"All methodology aspects are fully covered "
-                        f"({existing_str}). Check for completeness."
-                    )
+                    # Build task from methodology: find under-represented relationship types
+                    rel_counts = Counter()
+                    for s in all_elements:
+                        try:
+                            full = storage.read_element(s.id)
+                            for rt in full.relationships or {}:
+                                rel_counts[rt] += len(full.relationships[rt])
+                        except Exception:
+                            pass
+
+                    # Collect all cross-aspect relationship types from methodology
+                    cross_aspect_rels = {}
+                    for aspect in method.aspects:
+                        for rt in aspect.relationship_types or []:
+                            cross_aspect_rels[rt.name] = {
+                                "title": rt.title,
+                                "sources": rt.source_aspects,
+                                "targets": rt.target_aspects,
+                            }
+
+                    # Find missing or sparse relationship types
+                    sparse = []
+                    for rname, rinfo in cross_aspect_rels.items():
+                        count = rel_counts.get(rname, 0)
+                        if count == 0:
+                            sparse.append((rname, rinfo, "MISSING"))
+                        elif (
+                            rname
+                            in (
+                                "interacts_with",
+                                "applies_to",
+                                "implements",
+                                "measures",
+                                "references",
+                            )
+                            and count < 5
+                        ):
+                            sparse.append((rname, rinfo, f"only {count}"))
+
+                    if sparse:
+                        lines = []
+                        skill_map = {
+                            "refines": "scenario_decomposer",
+                            "next_step": "scenario_decomposer",
+                            "navigates_to": "ui_navigator",
+                            "contains": "metrics_linker",
+                            "triggers_on": "metrics_linker",
+                        }
+                        for rname, rinfo, status in sparse:
+                            src = ", ".join(rinfo["sources"])
+                            tgt = ", ".join(rinfo["targets"])
+                            skill = skill_map.get(rname, "")
+                            hint = f" (spawn {skill} helper)" if skill else ""
+                            lines.append(f"  {rname}: {status} — {src} → {tgt}{hint}")
+                        task_lines = "\n".join(lines)
+                        initial_task = (
+                            f"All methodology aspects have elements: {existing_str}.\n\n"
+                            f"FILL MISSING RELATIONSHIPS. Spawn helpers via request_helper:\n"
+                            f"{task_lines}\n\n"
+                            f"Delegate work to helpers with request_helper(role=skill_name, task=...). "
+                            f"Each helper has a specialized prompt for its relationship type."
+                        )
+                    else:
+                        initial_task = (
+                            f"All methodology aspects are fully covered "
+                            f"({existing_str}). Check for completeness."
+                        )
 
     # Create agents via factory
     from src.agents.factory import AgentFactory
@@ -947,14 +997,77 @@ def run(
         tools1 = get_tool_definitions(writable=role1.writable)
         if role1._allowed_tools:
             tools1 = [t for t in tools1 if t.name in role1._allowed_tools]
+
+        # ── Reengineer mode: add code-analysis tools, remove source-document tools ──
+        if reengineer:
+            from src.providers.base import ToolDef
+            # Remove source-document reading tools
+            tools1 = [t for t in tools1 if t.name not in ("read_source_document",)]
+            # Add code-analysis tools (only if not already present)
+            existing_names = {t.name for t in tools1}
+            if "get_file_tree" not in existing_names:
+                tools1.append(ToolDef(name="get_file_tree", description="List the project file structure", parameters={
+                    "type": "object", "properties": {
+                        "subdir": {"type": "string", "description": "Subdirectory path (default: project root)"}
+                    }, "required": []
+                }))
+            if "search_code" not in existing_names:
+                tools1.append(ToolDef(name="search_code", description="Search for a pattern in code files", parameters={
+                    "type": "object", "properties": {
+                        "pattern": {"type": "string", "description": "Text or regex pattern to search for"},
+                        "path": {"type": "string", "description": "Subdirectory to search (default: project root)"}
+                    }, "required": ["pattern"]
+                }))
+            if "read_file" not in existing_names:
+                tools1.append(ToolDef(name="read_file", description="Read a code file content", parameters={
+                    "type": "object", "properties": {
+                        "file_path": {"type": "string", "description": "Relative path from project root"}
+                    }, "required": ["file_path"]
+                }))
+
         handlers1 = build_all_handlers(
             storage, method, str(project_path / "source"), ci_threshold=ci or 0.7
         )
+
+        # ── Reengineer mode: add code-analysis handlers ──
+        if reengineer:
+            from src.agents.persistent_agent import AgentWorker
+            _worker = AgentWorker(role="reengineer", project_path=str(project_path))
+            if "get_file_tree" not in handlers1:
+                handlers1["get_file_tree"] = _worker._tool_get_file_tree
+            if "search_code" not in handlers1:
+                handlers1["search_code"] = _worker._tool_search_code
+            if "read_file" not in handlers1:
+                handlers1["read_file"] = _worker._tool_read_file
+            # Remove source-document handler
+            handlers1.pop("read_source_document", None)
+
         prompt1 = (
             role1.prompt.format(methodology_description=format_methodology(method))
             if role1.prompt
             else ""
         )
+
+        # ── Reengineer mode: use reengineer prompt ──
+        if reengineer:
+            from pathlib import Path as _Path
+            # Load reengineer skill prompt
+            _pkg_dir = _Path(__file__).resolve().parent.parent
+            _skill_file = _pkg_dir / "data" / "skills" / "reengineer.yaml"
+            reengineer_prompt = ""
+            if _skill_file.exists():
+                import yaml as _yaml
+                try:
+                    data = _yaml.safe_load(_skill_file.read_text()) or {}
+                    for skill_data in data.get("skills", []):
+                        if skill_data.get("name") == "reengineer":
+                            reengineer_prompt = skill_data.get("prompt", "")
+                            break
+                except Exception:
+                    pass
+            if reengineer_prompt:
+                prompt1 = reengineer_prompt
+            console.print("[dim]Agent 1 using reengineer prompt[/dim]")
 
         # Agent 2: linker
         role2 = AgentRole.cross_aspect_agent("Agent 2")

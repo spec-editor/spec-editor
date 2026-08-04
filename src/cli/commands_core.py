@@ -71,6 +71,11 @@ def check_environment(
         warnings.append("Redis is not reachable at 127.0.0.1:6379 — agent task queues won't work")
 
     # ── 3. methodology.yaml ──
+    from src.config.engine import resolve_project_path
+
+    resolved = resolve_project_path(project_path)
+    if resolved is not None:
+        project_path = resolved
     method_path = project_path / "methodology.yaml"
     if not method_path.exists():
         warnings.append(f"methodology.yaml not found in {project_path}")
@@ -109,7 +114,12 @@ def check_environment(
 @click.option("--strict", is_flag=True, help="Strict mode (warnings → errors)")
 def validate_cmd(path: str, strict: bool) -> None:
     """Validate the specification."""
+    from src.config.engine import resolve_project_path
+
     project_path = Path(path).resolve()
+    resolved = resolve_project_path(project_path)
+    if resolved is not None:
+        project_path = resolved
     method_path = project_path / "methodology.yaml"
 
     if not method_path.exists():

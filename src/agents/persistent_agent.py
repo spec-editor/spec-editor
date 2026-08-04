@@ -91,6 +91,7 @@ class AgentWorker(Agent):
                         "element_type": {"type": "string", "description": "Required for NEW elements"},
                         "title": {"type": "string", "description": "Title for NEW elements"},
                         "parent": {"type": "string", "description": "Parent element ID (optional)"},
+                        "provenance_source": {"type": "string", "description": "Source file:line reference"},
                     }, "required": ["id"]
                 }),
                 ToolDef(name="list_all_elements", description="List all elements", parameters={
@@ -138,6 +139,9 @@ class AgentWorker(Agent):
                             "file_path": {"type": "string", "description": "Relative path from project root"}
                         }, "required": ["file_path"]
                     }),
+                    ToolDef(name="get_methodology", description="Get available aspects and element types for this project", parameters={
+                        "type": "object", "properties": {}
+                    }),
                 ])
                 tool_handlers.update({
                     "get_file_tree": self._tool_get_file_tree,
@@ -146,6 +150,7 @@ class AgentWorker(Agent):
                     "search_elements": self._tool_search_elements,
                     "list_aspect": self._tool_list_aspect,
                     "read_file": self._tool_read_file,
+                    "get_methodology": self._tool_get_methodology,
                 })
             skills_to_load = [role]
 
@@ -160,6 +165,16 @@ class AgentWorker(Agent):
             system_prompt=system_prompt,
             skills=skills_to_load,
         )
+
+        # Load methodology if available in the project
+        self._methodology = None
+        try:
+            from src.config.methodology import load_methodology
+            method_path = self._project_path / "methodology.yaml"
+            if method_path.exists():
+                self._methodology = load_methodology(method_path)
+        except Exception:
+            pass
 
     async def run(self) -> None:
         """Connect to queue and process tasks forever."""
@@ -284,7 +299,8 @@ class AgentWorker(Agent):
     async def _tool_write_element(self, id: str = "", status: str = "", tags: list | None = None,
                                    content: str = "", aspect: str = "",
                                    element_type: str = "", title: str = "",
-                                   parent: str = "", element_id: str = "") -> dict:
+                                   parent: str = "", element_id: str = "",
+                                   provenance_source: str = "") -> dict:
         """Tool: CREATE or UPDATE an element. Delegates to shared write_element_tool.
 
         Uses the same implementation as the MCP server — methodology validation,
@@ -319,6 +335,7 @@ class AgentWorker(Agent):
             parent=parent or None,
             tags=tags or [],
             status=status or "confirmed",
+            provenance_source=provenance_source or None,
         )
 
         if result.get("status") == "error":
@@ -495,6 +512,34 @@ class AgentWorker(Agent):
             return {"file": file_path, "size": total_len, "content": content[:5000]}
         except Exception as exc:
             return {"error": str(exc), "file": file_path, "content": ""}
+
+    async def _tool_get_methodology(self) -> dict:
+        """Tool: get available aspects, element types, and relationships."""
+        if not self._methodology:
+            return {"error": "No methodology loaded", "aspects": []}
+        m = self._methodology
+        aspects = []
+        for a in m.aspects:
+            aspects.append({
+                "name": a.name,
+                "title": a.title,
+                "element_types": [{"name": et.name, "title": et.title} for et in a.element_types],
+            })
+        relationships = []
+        for a in m.aspects:
+            for rt in a.relationship_types:
+                relationships.append({
+                    "name": rt.name,
+                    "title": rt.title,
+                    "source_aspects": rt.source_aspects,
+                    "target_aspects": rt.target_aspects,
+                })
+        return {
+            "methodology_name": m.name,
+            "version": m.version,
+            "aspects": aspects,
+            "valid_relationship_types": sorted(self._VALID_REL_TYPES),
+        }
 
     # ── Redis helpers (overridable for testing) ──
 
@@ -1496,6 +1541,89 @@ class AgentWorker(Agent):
 
     # ── Reengineer ──
 
+    def _build_reengineer_task(self, code_dir: str, deep: bool, phases: list) -> tuple[str, list]:
+        """Build the task message and focused phases list for reengineer."""
+        is_rerun = False
+        imp_count = 0
+        if deep:
+            try:
+                from src.storage.filesystem import FilesystemStorage
+                storage = FilesystemStorage(self._project_path)
+                for s in storage.list_all():
+                    if s.aspect == "implementation":
+                        imp_count += 1
+                is_rerun = imp_count > 5 and (
+                    code_dir == str(self._project_path)
+                    or code_dir.startswith(str(self._project_path) + "/src")
+                )
+            except Exception:
+                pass
+
+        if is_rerun and deep:
+            task_msg = (
+                f"INCREMENTAL REVERSE ENGINEERING — focus on BEHAVIOUR only.\n\n"
+                f"The codebase at **{code_dir}** already has {imp_count} implementation "
+                f"elements from previous runs. Structure, APIs, DevOps, and UI are "
+                f"already documented.\n\n"
+                f"YOUR ONLY TASK: Run Phase 5 (Behaviour Tracing).\n"
+                f"- Use search_code to find event handlers (adapt patterns to LANGUAGE).\n"
+                f"- For each handler, create a step element (aspect=user_scenarios).\n"
+                f"- Group related steps into detailed_scenario flows.\n"
+                f"- Link steps to existing UI/module elements via interacts_with/implements.\n"
+                f"- Do NOT re-do Phases 1-4 — those elements already exist.\n"
+                f"- ALL new elements get status=confirmed.\n"
+                f"- Follow deduplication rules: search before create, update over create.\n"
+                f"- Report a summary of created behaviour elements."
+            )
+            return task_msg, ["behaviour"]
+
+        method_summary = ""
+        if self._methodology:
+            aspects_desc = []
+            for a in self._methodology.aspects:
+                types_desc = ", ".join(f"{et.name}({et.title})" for et in a.element_types)
+                aspects_desc.append(f"  - {a.name} ({a.title}): [{types_desc}]")
+            method_summary = (
+                f"\n## METHODOLOGY: {self._methodology.name} v{self._methodology.version}\n"
+                f"Available aspects and element types:\n"
+                + "\n".join(aspects_desc) + "\n"
+                f"\nValid relationship types: {', '.join(sorted(self._VALID_REL_TYPES))}\n"
+            )
+
+        deep_note = "\n  Phase 5 (BEHAVIOUR): Trace event handlers → step/detailed_scenario elements." if deep else ""
+        phases_desc = {
+            "structure": "Phase 1 (STRUCTURE): get_file_tree → create module + entity + field elements. One module per top-level source dir. One entity per data model. For each entity, create field children (aspect=data_entities, element_type=field) and add consists_of relationships.",
+            "devops": "Phase 2 (DEVOPS): Find Dockerfiles, CI configs, build scripts → create implementation elements.",
+            "api": "Phase 3 (API): search_code for route decorators → create endpoint elements (aspect=user_interface).",
+            "ui": "Phase 4 (UI): Find .tsx/.vue/.html files → create screen elements (aspect=user_interface).",
+            "behaviour": "Phase 5 (BEHAVIOUR): search_code for event handlers → create step elements (aspect=user_scenarios).",
+        }
+        phases_instructions = "\n".join(
+            f"  {phases_desc[p]}" for p in phases if p in phases_desc
+        )
+
+        task_msg = (
+            f"Reverse-engineer the codebase at **{code_dir}** into specification elements.\n"
+            f"{method_summary}\n"
+            f"## PHASES TO EXECUTE:\n{phases_instructions}{deep_note}\n\n"
+            f"## CRITICAL RULES:\n"
+            f"- ALL elements MUST have status=confirmed (they already exist in code).\n"
+            f"- Add provenance_source='file:line' for EVERY element.\n"
+            f"- ALWAYS call search_elements BEFORE write_element to avoid duplicates.\n"
+            f"- If an element with the same purpose exists, UPDATE it (same id).\n"
+            f"- Work PHASE BY PHASE — complete one phase before starting the next.\n"
+            f"- Be THOROUGH: document ALL modules, entities, APIs, screens, not just a sample.\n"
+            f"- For entities: create field children (not inline text). Use add_relationship with consists_of.\n"
+            f"- After ALL phases, report: elements created per aspect, relationships created."
+            f"- Add provenance_source='file:line' for EVERY element.\n"
+            f"- ALWAYS call search_elements BEFORE write_element to avoid duplicates.\n"
+            f"- If an element with the same purpose exists, UPDATE it (same id).\n"
+            f"- Work PHASE BY PHASE — complete one phase before starting the next.\n"
+            f"- Be THOROUGH: document ALL modules, entities, APIs, screens, not just a sample.\n"
+            f"- After ALL phases, report: elements created per aspect, relationships created."
+        )
+        return task_msg, phases
+
     async def _handle_reengineer(self, task: Task) -> TaskResult:
         """Reengineer agent — reverse-engineers existing codebase into spec.
 
@@ -1540,59 +1668,14 @@ class AgentWorker(Agent):
         print(f"[INFO] Tools available: {[t.name for t in self._tools]}")
         print(f"[INFO] Starting analysis... (this may take several minutes)\n")
 
-        # Build task context for the LLM
-        # Detect if this is a re-run of the SAME codebase
-        # Only skip phases if we already analyzed THIS code_dir before
-        is_rerun = False
-        if deep:
-            try:
-                from src.storage.filesystem import FilesystemStorage
-                storage = FilesystemStorage(self._project_path)
-                imp_count = 0
-                for s in storage.list_all():
-                    if s.aspect == "implementation":
-                        imp_count += 1
-                # Only treat as rerun if we already have elements AND
-                # the code_dir matches the project root (same codebase)
-                is_rerun = imp_count > 5 and (
-                    code_dir == str(self._project_path)
-                    or code_dir.startswith(str(self._project_path) + "/src")
-                )
-            except Exception:
-                pass
-
-        if is_rerun and deep:
-            # Focus ONLY on behaviour — skip already-done phases
-            task_msg = (
-                f"INCREMENTAL REVERSE ENGINEERING — focus on BEHAVIOUR only.\n\n"
-                f"The codebase at **{code_dir}** already has {imp_count} implementation "
-                f"elements from previous runs. Structure, APIs, DevOps, and UI are "
-                f"already documented.\n\n"
-                f"YOUR ONLY TASK: Run Phase 5 (Behaviour Tracing).\n"
-                f"- Use search_code to find event handlers (adapt patterns to LANGUAGE).\n"
-                f"- For each handler, create a step element (aspect=user_scenarios).\n"
-                f"- Group related steps into detailed_scenario flows.\n"
-                f"- Link steps to existing UI/module elements via interacts_with/implements.\n"
-                f"- Do NOT re-do Phases 1-4 — those elements already exist.\n"
-                f"- ALL new elements get status=confirmed.\n"
-                f"- Follow deduplication rules: search before create, update over create.\n"
-                f"- Report a summary of created behaviour elements."
-            )
-            phases_focus = ["behaviour"]
-        else:
-            deep_note = " --deep flag IS SET: run Phase 5 (behaviour tracing) too." if deep else ""
-            task_msg = (
-                f"Reverse-engineer the codebase at **{code_dir}** into the specification.\n"
-                f"Phases to run: {', '.join(phases)}.{deep_note}\n\n"
-                f"CRITICAL RULES:\n"
-                f"- ALL elements must have status=confirmed.\n"
-                f"- Add provenance.source for every element (file:line).\n"
-                f"- Use get_file_tree to survey the project first.\n"
-                f"- Call search_elements BEFORE creating any element to avoid duplicates.\n"
-                f"- UPDATE existing elements instead of creating duplicates.\n"
-                f"- After all phases complete, report a summary of created elements."
-            )
-            phases_focus = phases
+        try:
+            task_msg, phases_focus = self._build_reengineer_task(code_dir, deep, phases)
+        except Exception as exc:
+            import traceback
+            print(f"[ERROR] Failed to build reengineer task: {exc}")
+            traceback.print_exc()
+            return TaskResult(task_id=task.task_id, role="reengineer", status="failed",
+                            payload={"error": f"Task build failed: {exc}"})
 
         try:
             print("[LLM] Sending task to LLM...")
@@ -1612,7 +1695,6 @@ class AgentWorker(Agent):
                     "code_dir": code_dir,
                     "phases_completed": phases_focus,
                     "deep": deep,
-                    "is_rerun": is_rerun,
                 },
             )
         except Exception as exc:

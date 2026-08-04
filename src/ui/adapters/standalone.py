@@ -19,6 +19,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from src.config.engine import resolve_project_path
+
 import yaml
 
 from src.ui.adapters.base import (
@@ -137,22 +139,25 @@ class StandaloneAdapter(IEditorAdapter):
             self._current_project = candidate
             return candidate
 
-        # 4. Search for methodology.yaml in CWD
+        # 4. Search for methodology.yaml in CWD (or spec-editor subfolder)
         cwd = Path.cwd()
-        if (cwd / "methodology.yaml").is_file():
-            self._current_project = cwd
-            return cwd
+        resolved = resolve_project_path(cwd)
+        if resolved is not None:
+            self._current_project = resolved
+            return resolved
 
         return None
 
     def set_current_project(self, path: Path) -> None:
         if not path.is_dir():
             raise ValueError(f"Not a directory: {path}")
-        if not (path / "methodology.yaml").is_file():
+        resolved = resolve_project_path(path)
+        if resolved is None:
             raise ValueError(
                 f"Not a spec-editor project: {path} "
                 f"(missing methodology.yaml). Run 'spec-editor init'."
             )
+        path = resolved
         # In-memory only — do NOT write to local.yaml.
         # local.yaml holds user settings (queue_url, etc.) and must not
         # be modified by the MCP server.

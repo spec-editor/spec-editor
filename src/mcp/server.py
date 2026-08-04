@@ -197,12 +197,18 @@ class MCPHandler:
           If no env vars are configured, falls back to legacy behaviour:
           /projects/<basename>.
 
+          Also checks for a ``spec-editor`` subdirectory if methodology.yaml
+          is not found in the given directory directly.
+
         Returns:
             Resolved Path if methodology.yaml is found, None otherwise.
         """
+        from src.config.engine import resolve_project_path
+
         pp = Path(host_path)
-        if (pp / "methodology.yaml").is_file():
-            return pp
+        resolved = resolve_project_path(pp)
+        if resolved is not None:
+            return resolved
 
         mount_host = os.environ.get("SPEC_EDITOR_MOUNT_HOST", "")
         mount_container = os.environ.get("SPEC_EDITOR_MOUNT_CONTAINER", "")
@@ -213,8 +219,8 @@ class MCPHandler:
         if remapped is None:
             # Legacy fallback: try /projects/<basename>
             remapped = Path("/projects") / pp.name
-        if (remapped / "methodology.yaml").is_file():
-            return remapped
+        if resolve_project_path(remapped) is not None:
+            return resolve_project_path(remapped)
         return None
 
     def _init_state_for(self, pp: Path) -> None:

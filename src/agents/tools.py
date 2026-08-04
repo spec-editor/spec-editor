@@ -1437,9 +1437,9 @@ def build_read_only_handlers(
             storage, query, offset=offset, limit=limit
         ),
         "find_related": lambda element_id: find_related(storage, element_id),
-        "get_methodology": lambda: get_methodology_tool(methodology),
-        "run_validate": lambda: run_validate_tool(storage, methodology),
-        "run_metrics": lambda: run_metrics_tool(storage),
+        "get_methodology": lambda **__: get_methodology_tool(methodology),
+        "run_validate": lambda **__: run_validate_tool(storage, methodology),
+        "run_metrics": lambda **__: run_metrics_tool(storage),
         "get_context_for_file": lambda file_path="": get_context_for_file_tool(
             storage, file_path
         ),

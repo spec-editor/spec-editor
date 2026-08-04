@@ -72,8 +72,17 @@ web store for retail customers.
 """
 
 
+def _get_version() -> str:
+    """Get the installed spec-editor version from package metadata."""
+    try:
+        from importlib.metadata import version
+        return version("spec-editor")
+    except Exception:
+        return "unknown"
+
+
 @click.group()
-@click.version_option(version="0.1.9", prog_name="spec-editor")
+@click.version_option(version=_get_version(), prog_name="spec-editor")
 @click.pass_context
 @implements("SRC-008")
 @implements("MOD-005")
@@ -82,15 +91,16 @@ def cli(ctx):
     from pathlib import Path
 
     from rich.console import Console
+    from src.config.engine import resolve_project_path
 
     cwd = Path.cwd()
     project = None
     # Auto-detect: check current dir, then parent, then grandparent
+    # Also check spec-editor subfolder at each level
     for candidate in [cwd, cwd.parent, cwd.parent.parent]:
-        if (candidate / "methodology.yaml").exists() or (
-            candidate / "local.yaml"
-        ).exists():
-            project = candidate
+        resolved = resolve_project_path(candidate)
+        if resolved is not None or (candidate / "local.yaml").exists():
+            project = resolved if resolved is not None else candidate
             break
 
     ctx.ensure_object(dict)

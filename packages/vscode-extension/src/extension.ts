@@ -37,6 +37,53 @@ const UI_DELAY = {
   PENDING_LOAD_DELAY: 2000,
 } as const;
 
+// ── Project path resolution ───────────────────────────────────────────────
+/**
+ * Resolve a directory to a spec-editor project path.
+ *
+ * Checks for methodology.yaml in the given directory, and if not found,
+ * tries a ``spec-editor`` subdirectory (common when spec-editor files
+ * live in a subfolder of the main project).
+ *
+ * If methodology.yaml exists in both the root and the subfolder, prefers
+ * the one that has actual data (an ``aspects/`` directory with content).
+ *
+ * Returns the resolved path if found, or null.
+ */
+function resolveProjectPath(candidate: string): string | null {
+  const rootMethod = path.join(candidate, "methodology.yaml");
+  const rootAspects = path.join(candidate, "aspects");
+  const rootHasMethod = require("fs").existsSync(rootMethod);
+  const rootHasData = rootHasMethod &&
+    require("fs").existsSync(rootAspects) &&
+    require("fs").readdirSync(rootAspects).length > 0;
+
+  const sub = path.join(candidate, "spec-editor");
+  const subMethod = path.join(sub, "methodology.yaml");
+  const subAspects = path.join(sub, "aspects");
+  const subHasMethod = require("fs").existsSync(subMethod);
+  const subHasData = subHasMethod &&
+    require("fs").existsSync(subAspects) &&
+    require("fs").readdirSync(subAspects).length > 0;
+
+  // Prefer subfolder if root has methodology but no data, and subfolder has both
+  if (subHasMethod && subHasData && (!rootHasData || !rootHasMethod)) {
+    return sub;
+  }
+
+  // Prefer root if it has methodology (with or without data)
+  if (rootHasMethod) {
+    return candidate;
+  }
+
+  // Subfolder with methodology but no data — still a valid project
+  if (subHasMethod) {
+    return sub;
+  }
+
+  return null;
+}
+
 // Log file with timestamp so each run gets its own file.
 // Format: /tmp/spec-editor-2026-06-14T12-34-56.log
 function makeLogPath(): string {
@@ -1050,11 +1097,11 @@ status: ${el.status || "draft"}
       statusBar.tooltip = "Reengineer is running — click to stop";
       statusBar.color = new vscode.ThemeColor("statusBarItem.warningForeground");
       runTerminal.sendText(
-        `${cli} agent reengineer -p "${wsRoot}"`,
+        `${cli} run --reengineer -p "${wsRoot}"`,
       );
       runTerminal.show();
       outputChannel.info(
-        `[Reengineer] ${cli} agent reengineer -p "${wsRoot}"`,
+        `[Reengineer] ${cli} run --reengineer -p "${wsRoot}"`,
       );
       logEvent("INFO", `specEditor.reengineer: started`);
     }),
@@ -1341,7 +1388,8 @@ status: ${el.status || "draft"}
         return;
       }
       logEvent("INFO", `_quickOpen: trying ${projPath}`);
-      if (!require("fs").existsSync(path.join(projPath, "methodology.yaml"))) {
+      const resolvedProj = resolveProjectPath(projPath);
+      if (!resolvedProj) {
         logEvent("WARN", `_quickOpen: no methodology.yaml in ${projPath}`);
         vscode.window.showErrorMessage("No methodology.yaml in " + projPath);
         return;
@@ -1931,11 +1979,12 @@ async function startMcpServer(
       let localPath: string | undefined =
         lastProj ?? (await findProject()) ?? undefined;
 
-      // Fallback: check workspace root directly
+      // Fallback: check workspace root directly (also try spec-editor subfolder)
       if (!localPath && wsRoot) {
         try {
-          if (require("fs").existsSync(path.join(wsRoot, "methodology.yaml"))) {
-            localPath = wsRoot;
+          const resolved = resolveProjectPath(wsRoot);
+          if (resolved) {
+            localPath = resolved;
           }
         } catch {
           /* ignore */
@@ -2063,7 +2112,9 @@ async function startMcpServer(
   let projectPath: string | undefined = await findProject();
   if (!projectPath && workspaceRoot) {
     const initMarker: string = path.join(workspaceRoot, "methodology.yaml");
-    if (!require("fs").existsSync(initMarker)) {
+    const initSubMarker: string = path.join(workspaceRoot, "spec-editor", "methodology.yaml");
+    const markerExists = require("fs").existsSync(initMarker) || require("fs").existsSync(initSubMarker);
+    if (!markerExists) {
       logEvent("INFO", `Auto-init spec-editor project in ${workspaceRoot}`);
       outputChannel.info(
         `Initialising spec-editor project in ${workspaceRoot}...`,
@@ -2259,11 +2310,11 @@ async function startMcpServer(
   const lastProject: string | undefined =
     extensionContext.workspaceState.get("lastProject");
   // Fallback: use VSCode workspace root if it contains methodology.yaml
+  // (also check spec-editor subfolder)
   const restorePath: string | undefined =
     lastProject ??
-    (workspaceRoot &&
-    require("fs").existsSync(path.join(workspaceRoot, "methodology.yaml"))
-      ? workspaceRoot
+    (workspaceRoot && resolveProjectPath(workspaceRoot)
+      ? resolveProjectPath(workspaceRoot)!
       : undefined);
   logEvent(
     "INFO",
@@ -2388,7 +2439,8 @@ async function handleOpenProject(): Promise<void> {
   const projectPath: string = folders[0].fsPath;
   logEvent("INFO", `handleOpenProject: selected ${projectPath}`);
 
-  if (!require("fs").existsSync(path.join(projectPath, "methodology.yaml"))) {
+  const resolved = resolveProjectPath(projectPath);
+  if (!resolved) {
     logEvent(
       "WARN",
       `handleOpenProject: no methodology.yaml in ${projectPath}`,
@@ -2401,9 +2453,9 @@ async function handleOpenProject(): Promise<void> {
 
   treeView.message = "Loading…";
   treeProvider.loadElements();
-  extensionContext.workspaceState.update("lastProject", projectPath);
+  extensionContext.workspaceState.update("lastProject", resolved);
   vscode.window.showInformationMessage(
-    `Opened spec-editor project: ${projectPath}`,
+    `Opened spec-editor project: ${resolved}`,
   );
 }
 
@@ -2759,8 +2811,8 @@ async function _ensureMcpJson(): Promise<void> {
       vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!wsRoot) return;
 
-    // Only configure MCP for spec-editor projects
-    if (!require("fs").existsSync(path.join(wsRoot, "methodology.yaml"))) {
+    // Only configure MCP for spec-editor projects (also check spec-editor subfolder)
+    if (!resolveProjectPath(wsRoot)) {
       return;
     }
 
@@ -2816,7 +2868,7 @@ async function findProject(): Promise<string | undefined> {
     for (const folder of folders) {
       const pattern: vscode.RelativePattern = new vscode.RelativePattern(
         folder,
-        "methodology.yaml",
+        "**/methodology.yaml",
       );
       const files: vscode.Uri[] = await vscode.workspace.findFiles(
         pattern,

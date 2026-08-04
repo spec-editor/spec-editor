@@ -106,31 +106,42 @@ class Agent:
     # ═══════════════════════════════════════════════════════════════════════
 
     def _load_skills(self) -> None:
-        """Load skill prompts from skills/*.yaml based on configured skill names."""
-        skills_dir = self._project_path / "skills"
-        if not skills_dir.is_dir():
-            return
+        """Load skill prompts from skills/*.yaml.
 
+        Looks first in the spec-editor package's skills/ directory
+        (distributed with the package), then in the project's skills/
+        directory for project-specific overrides.
+        """
         import yaml
 
-        for skill_file in sorted(skills_dir.glob("*.yaml")):
-            try:
-                data = yaml.safe_load(skill_file.read_text()) or {}
-                for skill_data in data.get("skills", []):
-                    skill_name = skill_data.get("name", "")
-                    if not self._skills or skill_name in self._skills:
-                        prompt = skill_data.get("prompt", "")
-                        if prompt:
-                            self._skill_prompts[skill_name] = prompt
-                            self._log.info(
-                                "skill_loaded",
-                                skill=skill_name,
-                                file=str(skill_file.name),
-                            )
-            except Exception as exc:
-                self._log.error(
-                    "skill_load_error", file=str(skill_file.name), error=str(exc)
-                )
+        # Find package skills directory (relative to this source file)
+        _pkg_dir = Path(__file__).resolve().parent.parent.parent  # agent.py → agents → src → root
+        skills_dirs = [
+            _pkg_dir / "data" / "skills",     # package skills (shipped with spec-editor)
+            self._project_path / "skills",     # project-specific overrides
+        ]
+
+        for skills_dir in skills_dirs:
+            if not skills_dir.is_dir():
+                continue
+            for skill_file in sorted(skills_dir.glob("*.yaml")):
+                try:
+                    data = yaml.safe_load(skill_file.read_text()) or {}
+                    for skill_data in data.get("skills", []):
+                        skill_name = skill_data.get("name", "")
+                        if not self._skills or skill_name in self._skills:
+                            prompt = skill_data.get("prompt", "")
+                            if prompt and skill_name not in self._skill_prompts:
+                                self._skill_prompts[skill_name] = prompt
+                                self._log.info(
+                                    "skill_loaded",
+                                    skill=skill_name,
+                                    file=str(skill_file.name),
+                                )
+                except Exception as exc:
+                    self._log.error(
+                        "skill_load_error", file=str(skill_file.name), error=str(exc)
+                    )
 
     def get_skill_prompt(self, skill_name: str) -> str:
         """Get the prompt for a loaded skill."""

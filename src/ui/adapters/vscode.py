@@ -79,20 +79,27 @@ class VscodeAdapter(IEditorAdapter):
         return projects
 
     def get_current_project(self) -> Path | None:
+        from src.config.engine import resolve_project_path
+
         if self._project_path:
             p = Path(self._project_path)
-            if (p / "methodology.yaml").exists():
-                return p
+            resolved = resolve_project_path(p)
+            if resolved is not None:
+                return resolved
         if self._workspace_root:
             p = Path(self._workspace_root)
-            if (p / "methodology.yaml").exists():
-                return p
+            resolved = resolve_project_path(p)
+            if resolved is not None:
+                return resolved
         return None
 
     def set_current_project(self, path: Path) -> None:
-        if not (path / "methodology.yaml").exists():
+        from src.config.engine import resolve_project_path
+
+        resolved = resolve_project_path(path)
+        if resolved is None:
             raise ValueError(f"Not a spec-editor project: {path}")
-        self._project_path = str(path)
+        self._project_path = str(resolved)
 
     def on_project_changed(self, callback) -> Disposable:
         # VSCode workspace changes are handled by the extension, not the server

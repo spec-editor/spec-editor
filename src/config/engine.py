@@ -20,6 +20,47 @@ from src.mcp.validator import ValidationReport, validate as run_validate
 from src.storage.adapter import StorageAdapter
 
 
+def resolve_project_path(candidate: Path) -> Path | None:
+    """Resolve a spec-editor project path.
+
+    Checks for methodology.yaml in the given directory, and if not found,
+    tries a ``spec-editor`` subdirectory (common when spec-editor files
+    live in a subfolder of the main project).
+
+    If methodology.yaml exists in both the root and the subfolder, prefers
+    the one that has actual data (an ``aspects/`` directory with content).
+
+    Returns the resolved Path if a project is found, None otherwise.
+    """
+    root_method = (candidate / "methodology.yaml").is_file()
+    root_has_data = (candidate / "aspects").is_dir() and any((candidate / "aspects").iterdir())
+    root_has_local = (candidate / "local.yaml").is_file()
+
+    sub = candidate / "spec-editor"
+    sub_method = (sub / "methodology.yaml").is_file()
+    sub_has_data = (sub / "aspects").is_dir() and any((sub / "aspects").iterdir())
+    sub_has_local = (sub / "local.yaml").is_file()
+
+    # If root has methodology but NO data and NO local.yaml, and subfolder has methodology,
+    # the project is clearly in the subfolder (root methodology is just a stub)
+    if sub_method and not root_has_data and not root_has_local:
+        return sub
+
+    # Prefer subfolder if root has methodology but no data, and subfolder has both
+    if sub_method and sub_has_data and (not root_has_data or not root_method):
+        return sub
+
+    # Prefer root if it has methodology (with data) or has local.yaml
+    if root_method and (root_has_data or root_has_local):
+        return candidate
+
+    # Subfolder with methodology — valid project
+    if sub_method:
+        return sub
+
+    return None
+
+
 class MethodologyEngine:
     """Central entry point for methodology operations.
 
