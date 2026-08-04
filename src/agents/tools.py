@@ -648,6 +648,13 @@ async def add_relationship_tool(
     try:
         element = storage.read_element(source_id)
 
+        # Validate target exists
+        if not storage.exists(target_id):
+            return {
+                "status": "error",
+                "message": f"Target element '{target_id}' not found. Create it first with write_element.",
+            }
+
         # Validate relationship type against methodology
         if methodology:
             from src.config.methodology import get_aspect, get_relationship_type

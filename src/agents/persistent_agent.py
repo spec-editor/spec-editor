@@ -437,7 +437,17 @@ class AgentWorker(Agent):
         from src.storage.filesystem import FilesystemStorage
         from src.storage.models import RelationshipEntry
         storage = FilesystemStorage(self._project_path)
-        el = storage.read_element(source_id)
+
+        # Validate source exists
+        try:
+            el = storage.read_element(source_id)
+        except (KeyError, FileNotFoundError):
+            return {"error": f"Source element '{source_id}' not found"}
+
+        # Validate target exists
+        if not storage.exists(target_id):
+            return {"error": f"Target element '{target_id}' not found. Create it first with write_element."}
+
         if rel_type not in el.relationships:
             el.relationships[rel_type] = []
         already = [e for e in el.relationships[rel_type] if e.target == target_id]
