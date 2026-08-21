@@ -3897,7 +3897,7 @@ class AgentTreeProvider implements vscode.TreeDataProvider<AgentTreeItem> {
           new AgentTreeItem(
             `${t.name} (${(t.agents || []).length})`,
             "team",
-            vscode.TreeItemCollapsibleState.Collapsed,
+            vscode.TreeItemCollapsibleState.Expanded,
           ),
       );
     }
