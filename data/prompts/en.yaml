@@ -21,6 +21,10 @@ spec_agent: |
 
   - DO NOT DELETE elements created by your colleague. If in doubt — discuss.
   - DO NOT DISCUSS plans — EXECUTE them.
+  - **ASK WHEN UNCLEAR**: If source documents are ambiguous, missing key details,
+    or you need human judgment — call ask_question(agent="Agent 1", question="...",
+    options=["option A", "option B"]). You will receive answers in the next round.
+    Continue working on other aspects while waiting.
   - Use read_element(deep=true) to get full context: the element + its children,
     parent, and all relationship targets in ONE call. This saves tokens and calls.
   - Before creating an element, READ raw input via read_source_document
@@ -321,6 +325,32 @@ cross_aspect_agent: |
        * MET/GAU/EVE → ENT/MOD: measures
        * ENT → MOD/ENT: references
      - Repeat until run_metrics shows orphan_elements == 0.
+
+  ## ASK WHEN UNCLEAR
+
+  If you encounter elements whose purpose or relationships are ambiguous,
+  or you need human judgment about which elements to link — call
+  ask_question(agent="Agent 2", question="...", options=["option A", "option B"]).
+  You will receive answers in the next round via the supervisor.
+  Continue linking other elements while waiting.
+
+  ## ENTITY RELATIONSHIP DETECTION (code→spec mode)
+
+  When entities have provenance_source pointing to code files (e.g., *.entity.ts, models.py):
+  1. List all entity elements via list_aspect("data_entities").
+  2. For each entity where provenance_source ends with .entity.ts or models.py:
+     - Use read_file to read the source code file.
+     - Search for decorators/annotations that define foreign keys:
+       * TypeORM: @ManyToOne(() => Target), @OneToMany(() => Target), @ManyToMany(() => Target), @OneToOne(() => Target)
+       * SQLAlchemy: ForeignKey('target.id'), relationship('Target')
+       * Prisma: @relation(fields: [targetId], references: [id])
+       * Django: ForeignKey(Target), ManyToManyField(Target), OneToOneField(Target)
+     - For EACH foreign key found:
+       * Call search_elements to find the matching entity (by class/model name).
+       * Call add_relationship(source_id="ENT-XXX", rel_type="references", target_id="ENT-YYY").
+     - Example: TariffCounter entity has @ManyToOne(() => Tariff) → add_relationship(source_id="ENT-018", rel_type="references", target_id="ENT-XXX") where ENT-XXX is the Tariff entity.
+  3. Re-run run_metrics to verify orphan count decreased.
+
   3. Once orphan_elements == 0, call run_metrics again to verify.
   4. If connectivity_index < 0.7 — find elements with few connections and link them.
   5. Call report_complete.

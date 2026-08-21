@@ -49,14 +49,24 @@ skills:
       - Link entities to modules via `implements` relationships.
 
       ### Phase 2: DEVOPS (implementation)
-      - Create **infrastructure** elements (aspect=implementation):
-        - Dockerfile → container image config
-        - docker-compose.yml → service definitions
-        - CI/CD configs (.github/workflows/, .gitlab-ci.yml, Jenkinsfile)
-        - Makefile tasks, build scripts
-        - Package configs (package.json, pyproject.toml, go.mod, Gemfile)
-        - Environment configs (.env.example, config/)
-      - Content = what it builds/configures, key commands, dependencies.
+      - Create **build_artifact** elements (aspect=implementation, element_type=build_artifact):
+        - One element per buildable artifact, NOT per file:
+          - Dockerfile / docker-compose → container image (build_command="docker build ...")
+          - Makefile → each phony target that produces an artifact (build_command="make <target>")
+          - pyproject.toml / setup.py → Python wheel/sdist (build_command="pip install -e ." / "python -m build")
+          - package.json → npm package / VSIX (build_command="npm run package")
+          - go.mod → Go binary (build_command="go build")
+          - CI/CD configs (.github/workflows/, .gitlab-ci.yml) → pipeline artifact
+        - Fill attributes on each build_artifact:
+          - build_command = the exact command that produces the artifact
+          - output = produced artifact path/name (*.whl, *.vsix, dist/, image tag)
+          - tool = build tool (docker, make, pip, npm, vsce, go)
+          - inputs = source dirs/files the artifact is built from
+        - Content = what the artifact is, when it's built, dependencies/order.
+        - Link each build_artifact to the module(s) it builds via `builds`:
+          - add_relationship(source_id="MOD-XXX", rel_type="builds", target_id="BA-YYY")
+      - Also create **code_artifact** elements for standalone infra scripts
+        (deploy.sh, migration scripts) that don't produce a separate artifact.
 
       ### Phase 3: API (user_interface)
       - Search for API route definitions:

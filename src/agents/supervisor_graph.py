@@ -231,6 +231,9 @@ class SupervisorGraph:
         """
         now = time.monotonic()
 
+        # ── Inject answered questions into agent context ──
+        self._inject_answered_questions(state)
+
         # Timeout check
         if now - state["start_time"] > state["max_time_seconds"]:
             return {"status": "timeout"}
@@ -1384,6 +1387,35 @@ class SupervisorGraph:
             pp = Path(self._project_path) if not isinstance(self._project_path, Path) else self._project_path
             return pp / ".spec-editor-checkpoint.json"
         return None
+
+    def _inject_answered_questions(self, state: TeamState) -> None:
+        """Read questions.jsonl and inject answered questions into agent context.
+
+        Delivers human answers to questions asked by agents via ask_question.
+        Each answer is added as a USER message so both agents see it.
+        Only injects questions that haven't been delivered yet.
+        """
+        if not hasattr(self, '_delivered_questions'):
+            self._delivered_questions: set[str] = set()
+
+        try:
+            from src.agents.questions import QuestionList
+            ql = QuestionList(self._project_path) if self._project_path else None
+            if ql is None:
+                return
+            all_questions = ql._all()
+        except Exception:
+            return
+
+        for q in all_questions:
+            if q.status == "answered" and q.id not in self._delivered_questions:
+                self._delivered_questions.add(q.id)
+                answer_text = f"📩 Answer to your question {q.id} «{q.question}»: {q.answer}"
+                state["messages"].append({
+                    "role": "user",
+                    "content": answer_text,
+                })
+                logger.info("injected_answer", question_id=q.id, agent=q.agent)
 
     def _save_checkpoint(self, state: TeamState) -> None:
         """Save current state to checkpoint file for crash recovery.

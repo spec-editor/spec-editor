@@ -159,6 +159,8 @@ class MCPHandler:
         self._storage: Any = None
         # ── Per-project state: key = resolved project path string ──
         self._states: dict[str, dict[str, Any]] = {}
+        # ── Client info from initialize (used to filter agent-only tools) ──
+        self._client_name: str = ""
         # Legacy single-project init (for backward compat)
         if project_path:
             self._get_state(str(project_path.resolve()))
@@ -315,7 +317,7 @@ class MCPHandler:
         params = params or {}
 
         if method == "initialize":
-            return self._do_initialize()
+            return self._do_initialize(params)
 
         if method == "tools/list":
             return {"tools": self._build_schemas()}
@@ -325,9 +327,14 @@ class MCPHandler:
 
         return self._error(f"Unknown method: {method}")
 
-    def _do_initialize(self) -> dict:
-        """Return initialize response with version from VERSION file."""
+    def _do_initialize(self, params: dict | None = None) -> dict:
+        """Return initialize response. Captures client name for tool filtering."""
         from importlib.metadata import version as get_version
+
+        # Capture client name to filter agent-only tools from Copilot autocomplete
+        if params:
+            client_info = params.get("clientInfo", {})
+            self._client_name = client_info.get("name", "")
 
         try:
             pkg_version = get_version("spec-editor")
@@ -370,6 +377,8 @@ class MCPHandler:
             return self._handle_analyze_image(arguments)
         if tool_name == "list_diagram_types":
             return self._handle_list_diagram_types(arguments)
+        if tool_name == "spec_editor_system":
+            return self._handle_system(arguments)
 
         # ── All other tools require project_path ──
         project_path = arguments.get("project_path", "")
@@ -400,6 +409,10 @@ class MCPHandler:
                        "annotate_code", "verify_implements", "verify_traceability"}
         if tool_name in _code_tools and not tool_args.get("code_dir") and project_path:
             tool_args["code_dir"] = project_path
+
+        # Auto-fill project_path for tools that need it for internal resolution
+        if tool_name in ("capture_requirement",) and not tool_args.get("project_path"):
+            tool_args["project_path"] = project_path
 
         handler = handlers.get(tool_name)
         if handler:
@@ -440,6 +453,15 @@ class MCPHandler:
                             "sourceId": tool_args.get("source_id", ""),
                             "targetId": tool_args.get("target_id", ""),
                             "relType": tool_args.get("rel_type", ""),
+                            "project_path": project_path,
+                        },
+                    )
+                elif tool_name == "ask_question":
+                    self._sse_hub.notify(
+                        "question_asked",
+                        {
+                            "agent": tool_args.get("agent", ""),
+                            "question": tool_args.get("question", ""),
                             "project_path": project_path,
                         },
                     )
@@ -566,10 +588,49 @@ class MCPHandler:
         result = asyncio.run(_list_diagram_types_async(aspect))
         return self._content(result)
 
+    def _handle_system(self, arguments: dict) -> dict:
+        """Handle the consolidated spec_editor_system tool (subcommands)."""
+        # Auto-fill project_path if empty and a project is loaded
+        if not arguments.get("project_path"):
+            if self._states:
+                arguments["project_path"] = next(iter(self._states.keys()))
+
+        from src.mcp.system_tools import handle_system_command
+
+        # Resolve storage for project-scoped subcommands (capture_requirement)
+        storage = None
+        pp = arguments.get("project_path", "")
+        if pp:
+            try:
+                state = self._get_state(pp)
+                storage = state.get("storage")
+            except Exception:
+                pass
+
+        try:
+            result = handle_system_command(arguments, storage=storage)
+        except Exception as exc:
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            return self._error(str(exc))
+        return self._content(result)
+
     # ── Schema building ──
 
     def _build_schemas(self) -> list:
         tools = get_tool_definitions(writable=self._writable)
+
+        # Hide agent-only tools from Copilot autocomplete (they're for LLM agents, not humans)
+        _AGENT_ONLY_TOOLS = frozenset(
+            {"write_element", "add_relationship", "delete_element", "remove_relationship",
+             "request_helper", "request_clarification", "report_complete",
+             "notify_analysts_confirmed", "cleanup_fixed_bugs",
+             "escalate", "compact_context", "set_log_config"}
+        )
+        is_copilot = "copilot" in self._client_name.lower() or "github" in self._client_name.lower()
+        if is_copilot:
+            tools = [t for t in tools if t.name not in _AGENT_ONLY_TOOLS]
+
         schemas = [
             {"name": t.name, "description": t.description, "inputSchema": t.parameters}
             for t in tools
@@ -581,6 +642,7 @@ class MCPHandler:
             _get_project_info_schema(),    # stateless — full methodology for any project
             _analyze_image_schema(),        # stateless
             _list_diagram_types_schema(),   # stateless
+            _spec_editor_system_schema(),   # stateless — teams/agents/tasks/chat
             _git_history_schema(),
             _git_diff_schema(),
             _git_branches_schema(),
@@ -863,6 +925,12 @@ def _list_diagram_types_schema() -> dict:
             },
         },
     }
+
+
+def _spec_editor_system_schema() -> dict:
+    from src.mcp.system_tools import spec_editor_system_schema
+
+    return spec_editor_system_schema()
 
 
 def _generate_local_diagram_schema() -> dict:

@@ -343,6 +343,153 @@ async def run_metrics_tool(storage: StorageAdapter) -> dict:
     return report.model_dump()
 
 
+def _generate_id(storage: StorageAdapter, prefix: str) -> str:
+    """Generate next available ID with given prefix (e.g., SRC-001, SRC-002)."""
+    existing = storage.list_all()
+    nums = [
+        int(e.id.split("-")[-1])
+        for e in existing
+        if e.id.startswith(f"{prefix}-") and e.id.split("-")[-1].isdigit()
+    ]
+    next_num = max(nums) + 1 if nums else 1
+    return f"{prefix}-{next_num:03d}"
+
+
+def _get_provider_for_project(project_path: str = ""):
+    """Create an LLM provider for a project, trying local.yaml then env."""
+    import os
+    from pathlib import Path
+
+    from src.config.settings import AgentConfig, AgentsConfig, create_provider
+
+    # Try to load agent config from project's local.yaml
+    if project_path:
+        local_yaml = Path(project_path) / "local.yaml"
+        if local_yaml.exists():
+            try:
+                agents_config = AgentsConfig.from_yaml(local_yaml)
+                return create_provider(agents_config.agent_1)
+            except Exception:
+                pass
+
+    # Fall back to env vars
+    agents_config = AgentsConfig(
+        agent_1=AgentConfig(
+            provider=os.environ.get("SPEC_EDITOR__AGENT_1__PROVIDER", "openai"),
+            model=os.environ.get("SPEC_EDITOR__AGENT_1__MODEL", "gpt-4o"),
+            temperature=float(os.environ.get("SPEC_EDITOR__AGENT_1__TEMPERATURE", "0.7")),
+            max_tokens=int(os.environ.get("SPEC_EDITOR__AGENT_1__MAX_TOKENS", "4096")),
+        ),
+    )
+    return create_provider(agents_config.agent_1)
+
+
+async def capture_requirement_tool(
+    storage: StorageAdapter,
+    text: str,
+    title: str = "",
+    project_path: str = "",
+) -> dict:
+    """Capture a requirement from user input, with full preprocessing pipeline.
+
+    Pipeline:
+      1. Spam filter (RequirementClassifier)
+      2. Fact extraction (FactExtractor → title, description, aspect, priority)
+      3. Dedup check (DiffEngine)
+      4. Create SRC element with extracted data
+    """
+    from src.ingestion.analyzer import DiffEngine
+    from src.ingestion.preprocessor import (
+        ExtractedFact,
+        FactExtractor,
+        RequirementClassifier,
+    )
+    from src.providers.base import Message, MessageRole
+    from src.storage.models import Element, ElementStatus
+
+    # ── Resolve project path ──
+    pp = project_path or str(getattr(storage, "_project_path", ""))
+
+    # ── Phase 1: Spam filter (async — avoid nested asyncio.run) ──
+    provider = None
+    classification = None
+    try:
+        provider = _get_provider_for_project(pp)
+        from src.ingestion.preprocessor import _CLASSIFY_PROMPT
+
+        messages = [
+            Message(role=MessageRole.SYSTEM, content="You are a requirements analyser."),
+            Message(role=MessageRole.USER, content=_CLASSIFY_PROMPT.format(text=text)),
+        ]
+        response = await provider.complete(messages=messages)
+        classification = RequirementClassifier._parse_response(response.content or "")
+    except Exception:
+        classification = None  # LLM unavailable → assume it's a requirement
+
+    if classification is not None and not classification.is_requirement:
+        return {
+            "status": "skipped",
+            "reason": "spam",
+            "detail": classification.reasoning[:200],
+        }
+
+    # ── Phase 2: Fact extraction (async) ──
+    try:
+        from src.ingestion.preprocessor import _EXTRACT_PROMPT
+
+        messages = [
+            Message(role=MessageRole.SYSTEM, content="You are a requirements extractor."),
+            Message(role=MessageRole.USER, content=_EXTRACT_PROMPT.format(text=text)),
+        ]
+        response = await provider.complete(messages=messages)
+        fact = FactExtractor._parse_response(response.content or "", source_text=text)
+    except Exception:
+        fact = ExtractedFact(
+            title=title or text[:80].replace("\n", " ").strip(),
+            description=text,
+            aspect="modules",
+            priority="medium",
+        )
+
+    # ── Phase 3: Dedup check ──
+    try:
+        diff_engine = DiffEngine(storage)
+        diff = diff_engine.analyze(fact.title, fact.description)
+    except Exception:
+        diff = None
+
+    if diff is not None and diff.is_duplicate:
+        return {
+            "status": "skipped",
+            "reason": "duplicate",
+            "matched_id": diff.matched_id,
+            "matched_title": diff.matched_title,
+        }
+
+    # ── Phase 4: Create SRC element ──
+    short_title = fact.title or title or text[:80].replace("\n", " ").strip()
+    el_id = _generate_id(storage, "SRC")
+
+    element = Element(
+        id=el_id,
+        aspect="sources",
+        element_type="source",
+        title=short_title,
+        content=fact.description or text,
+        status=ElementStatus.DRAFT,
+        tags=["copilot-chat", "auto-captured"],
+    )
+    storage.write_element(element)
+    return {
+        "status": "ok",
+        "element_id": el_id,
+        "title": short_title,
+        "aspect": fact.aspect,
+        "priority": fact.priority,
+        "message": f"Requirement captured as {el_id}",
+    }
+
+
 # ======================================================================
 # Write tools (Agent 1 and Agent 2 only)
 # ======================================================================

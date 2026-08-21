@@ -59,5 +59,9 @@ class SkillsRegistry:
     def has(self, name: str) -> bool:
         return name in self._skills
 
+    def list(self) -> list[Skill]:
+        """Return all loaded skills."""
+        return list(self._skills.values())
+
     def __len__(self) -> int:
         return len(self._skills)

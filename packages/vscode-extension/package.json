@@ -7,7 +7,7 @@
   "license": "Apache-2.0",
   "repository": "https://github.com/zed-industries/spec-editor",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.92.0"
   },
   "categories": [
     "Other",
@@ -104,12 +104,28 @@
         "icon": "$(clear-all)"
       },
       {
-        "command": "specEditor.filterByAspect",
-        "title": "Aspect"
+        "command": "specEditor.tabReqs",
+        "title": "Reqs"
       },
       {
-        "command": "specEditor.filterByRelation",
-        "title": "Relation"
+        "command": "specEditor.tabAgents",
+        "title": "Agents"
+      },
+      {
+        "command": "specEditor.openAgentChat",
+        "title": "Spec Editor: Chat with Agent"
+      },
+      {
+        "command": "specEditor.openAgentSettings",
+        "title": "Spec Editor: Agent Settings"
+      },
+      {
+        "command": "specEditor.toggleAgentPaused",
+        "title": "Spec Editor: Pause/Resume Agent"
+      },
+      {
+        "command": "specEditor.toggleTaskPaused",
+        "title": "Spec Editor: Pause/Resume Task"
       },
       {
         "command": "specEditor.exportSpec",
@@ -547,12 +563,12 @@
           "group": "navigation@3"
         },
         {
-          "command": "specEditor.filterByAspect",
+          "command": "specEditor.tabReqs",
           "when": "view == specEditor.treeView",
-          "group": "navigation@1"
+          "group": "navigation@0"
         },
         {
-          "command": "specEditor.filterByRelation",
+          "command": "specEditor.tabAgents",
           "when": "view == specEditor.treeView",
           "group": "navigation@1"
         }
@@ -572,6 +588,26 @@
           "command": "specEditor.deleteElement",
           "when": "view == specEditor.treeView && viewItem == element",
           "group": "1_modify@2"
+        },
+        {
+          "command": "specEditor.toggleAgentPaused",
+          "when": "view == specEditor.treeView && viewItem == agentRunning",
+          "group": "inline"
+        },
+        {
+          "command": "specEditor.toggleAgentPaused",
+          "when": "view == specEditor.treeView && viewItem == agentPaused",
+          "group": "inline"
+        },
+        {
+          "command": "specEditor.toggleTaskPaused",
+          "when": "view == specEditor.treeView && viewItem == taskRunning",
+          "group": "inline"
+        },
+        {
+          "command": "specEditor.toggleTaskPaused",
+          "when": "view == specEditor.treeView && viewItem == taskPaused",
+          "group": "inline"
         }
       ]
     },
@@ -593,7 +629,7 @@
     "watch": "node esbuild.config.js --watch",
     "build": "node esbuild.config.js --production && cp src/bridge.js dist/ && cd ../frontend && npm run export && cp -r out ../vscode-extension/dist/",
     "typecheck": "tsc --noEmit",
-    "package": "npm run build && vsce package --no-dependencies && code --install-extension spec-editor-vscode-0.1.0.vsix --force",
+    "package": "npm run build && vsce package --no-dependencies && code --install-extension spec-editor-vscode-*.vsix --force",
     "lint": "eslint src/",
     "test-e2e": "node src/test/runTests.js"
   },

@@ -1092,11 +1092,35 @@ def run(
             tools2 = [t for t in tools2 if t.name in role2._allowed_tools]
         # Remove read_source_document — linker only reads specification elements
         tools2 = [t for t in tools2 if t.name != "read_source_document"]
+        # ── Reengineer mode: give Agent 2 code-reading tools for entity relationship detection ──
+        if reengineer:
+            existing_names2 = {t.name for t in tools2}
+            if "read_file" not in existing_names2:
+                tools2.append(ToolDef(name="read_file", description="Read a code file content to find foreign keys and relationships", parameters={
+                    "type": "object", "properties": {
+                        "file_path": {"type": "string", "description": "Relative path from project root"}
+                    }, "required": ["file_path"]
+                }))
+            if "search_code" not in existing_names2:
+                tools2.append(ToolDef(name="search_code", description="Search for patterns like @ManyToOne in code files", parameters={
+                    "type": "object", "properties": {
+                        "pattern": {"type": "string", "description": "Text or regex pattern to search for"},
+                        "path": {"type": "string", "description": "Subdirectory to search"}
+                    }, "required": ["pattern"]
+                }))
         handlers2 = build_all_handlers(
             storage, method, str(project_path / "source"), ci_threshold=ci or 0.7
         )
         # Remove read_source_document handler
         handlers2.pop("read_source_document", None)
+        # ── Reengineer mode: add code-reading handlers for Agent 2 ──
+        if reengineer:
+            from src.agents.persistent_agent import AgentWorker
+            _code_worker2 = AgentWorker(role="reengineer", project_path=str(reengineer_code_dir))
+            if "read_file" not in handlers2:
+                handlers2["read_file"] = _code_worker2._tool_read_file
+            if "search_code" not in handlers2:
+                handlers2["search_code"] = _code_worker2._tool_search_code
         prompt2 = (
             role2.prompt.format(methodology_description=format_methodology(method))
             if role2.prompt

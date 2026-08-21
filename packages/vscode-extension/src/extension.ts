@@ -228,8 +228,9 @@ let mcpReady: Promise<void> = Promise.resolve();
 let extensionContext: vscode.ExtensionContext;
 let treeProvider: SpecTreeProvider;
 let treeView: vscode.TreeView<SpecTreeItem>;
-let filterAspect: string = "";
-let filterRelation: string = "";
+let currentTab: "reqs" | "agents" = "reqs";
+let agentTreeProvider: AgentTreeProvider;
+let tabbedProvider: TabbedProvider;
 let activePanel: vscode.WebviewPanel | undefined;
 let statusBar: vscode.StatusBarItem;
 let mcpConnected: boolean = false;
@@ -371,6 +372,71 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     });
   }, 60_000);
   context.subscriptions.push({ dispose: () => clearInterval(syncInterval) });
+
+  // ── Chat watcher: auto-capture requirements from Copilot chat ──
+  // Watches ALL Copilot sessions. When a new message appears, checks if the
+  // session's cwd is a spec-editor project (has methodology.yaml). If so,
+  // captures the requirement into THAT project — even if it's not the
+  // currently open workspace.
+  let lastChatTurnId = 0;
+  const chatWatchInterval = setInterval(async () => {
+    if (!mcpConnected) return;
+
+    try {
+      const dbPath = path.join(
+        require("os").homedir(),
+        "Library/Application Support/Code/User/globalStorage/github.copilot-chat/session-store.db",
+      );
+      if (!require("fs").existsSync(dbPath)) return;
+
+      const cli = resolveSpecEditorCli();
+      const python = cli.includes(".venv")
+        ? cli.replace(/\/spec-editor$/, "/python")
+        : "python3";
+
+      const { execSync } = require("child_process");
+      // Fetch ALL new turns with their session cwd — no workspace filter.
+      // We'll resolve each cwd to a spec-editor project path in JS below.
+      const script =
+        `import sqlite3,json;db=sqlite3.connect(${JSON.stringify(dbPath)});` +
+        `rows=db.execute(` +
+          `'SELECT t.id,t.user_message,s.cwd FROM turns t JOIN sessions s ON t.session_id=s.id WHERE t.id>? ORDER BY t.id ASC',` +
+          `[${lastChatTurnId}]` +
+        `).fetchall();print(json.dumps([[r[0],r[1][:500],r[2]] for r in rows[-10:]]))`;
+      const result = execSync(
+        `${python} -c "${script.replace(/"/g, '\\"')}"`,
+        { timeout: 5000, encoding: "utf-8" },
+      ).trim();
+
+      if (!result || result === "[]") return;
+      const rows: [number, string, string][] = JSON.parse(result);
+
+      let capturedAny = false;
+      for (const [turnId, msg, cwd] of rows) {
+        lastChatTurnId = Math.max(lastChatTurnId, turnId);
+        if (msg.length < 20) continue;
+
+        // Check if this session's cwd is a spec-editor project
+        const projPath = cwd ? resolveProjectPath(cwd) : null;
+        if (!projPath) continue; // not a spec-editor project — skip
+
+        try {
+          await callMcp("spec_editor_system", {
+            command: "capture_requirement",
+            text: msg,
+            title: msg.substring(0, 80).replace(/\n/g, " "),
+            project_path: projPath,
+          });
+          logEvent("INFO", `chatWatcher: captured SRC from turn ${turnId} → ${projPath}`);
+          capturedAny = true;
+        } catch { /* dup or error */ }
+      }
+      if (capturedAny) {
+        treeProvider.loadElements();
+      }
+    } catch { /* DB locked, Python missing, etc. */ }
+  }, 30_000);
+  context.subscriptions.push({ dispose: () => clearInterval(chatWatchInterval) });
 
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument(async (doc: vscode.TextDocument) => {
@@ -522,6 +588,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   statusBar.color = new vscode.ThemeColor("statusBarItem.errorForeground");
   statusBar.show();
 
+  // Question notification badge
+  const questionBar = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Right,
+    99,
+  );
+  questionBar.command = "specEditor.viewQuestions";
+  questionBar.hide();
+  context.subscriptions.push(questionBar);
+
   // Register showLog command — opens latest log file
   context.subscriptions.push(
     vscode.commands.registerCommand("specEditor.showLog", async () => {
@@ -536,38 +611,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         );
       }
     }),
-    vscode.commands.registerCommand("specEditor.filterByAspect", async () => {
-      const aspects = ["all", ...treeProvider._aspectOrder];
-      const current = filterAspect || "all";
-      const picked = await vscode.window.showQuickPick(aspects, {
-        placeHolder: `Filter by aspect (current: ${current})`,
-      });
-      if (picked !== undefined) {
-        filterAspect = picked === "all" ? "" : picked;
-        treeProvider.loadElements();
-        logEvent("INFO", `filterByAspect: ${filterAspect || "all"}`);
-      }
+    vscode.commands.registerCommand("specEditor.tabReqs", async () => {
+      switchTab("reqs");
     }),
-    vscode.commands.registerCommand("specEditor.filterByRelation", async () => {
-      // Collect all relationship types across elements
-      const relTypes = new Set<string>();
-      for (const el of treeProvider.elements) {
-        if (el.relationships) {
-          for (const rt of Object.keys(el.relationships)) {
-            relTypes.add(rt);
-          }
-        }
-      }
-      const options = ["all", ...relTypes].sort();
-      const current = filterRelation || "all";
-      const picked = await vscode.window.showQuickPick(options, {
-        placeHolder: `Filter by relation type (current: ${current})`,
-      });
-      if (picked !== undefined) {
-        filterRelation = picked === "all" ? "" : picked;
-        treeProvider.loadElements();
-        logEvent("INFO", `filterByRelation: ${filterRelation || "all"}`);
-      }
+    vscode.commands.registerCommand("specEditor.tabAgents", async () => {
+      switchTab("agents");
+    }),
+    vscode.commands.registerCommand("specEditor.openAgentChat", async (agentKey: string) => {
+      openAgentChat(agentKey);
+    }),
+    vscode.commands.registerCommand("specEditor.openAgentSettings", async (agentKey: string) => {
+      openAgentSettings(agentKey);
+    }),
+    vscode.commands.registerCommand("specEditor.toggleAgentPaused", async (arg: any) => {
+      // Inline context menu passes AgentTreeItem as first arg; command click passes key string
+      const agentKey: string =
+        typeof arg === "string" ? arg : arg?.agentKey || "";
+      if (agentKey) await toggleAgentPaused(agentKey);
+    }),
+    vscode.commands.registerCommand("specEditor.toggleTaskPaused", async (arg: any) => {
+      const taskId: string =
+        typeof arg === "string" ? arg : arg?.taskId || "";
+      if (taskId) await toggleTaskPaused(taskId);
     }),
     vscode.commands.registerCommand("specEditor.refreshTree", async () => {
       logEvent("INFO", "refreshTree: manual refresh triggered");
@@ -1072,6 +1137,69 @@ status: ${el.status || "draft"}
     vscode.commands.registerCommand("specEditor.runPending", async () => {
       vscode.commands.executeCommand("specEditor.run");
     }),
+    vscode.commands.registerCommand("specEditor.viewQuestions", async () => {
+      const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!wsRoot) {
+        vscode.window.showErrorMessage("No workspace folder open");
+        return;
+      }
+      // Resolve project path
+      const resolved = resolveProjectPath(wsRoot);
+      const projPath = resolved || wsRoot;
+      const questionsPath = path.join(projPath, "questions.jsonl");
+
+      if (!require("fs").existsSync(questionsPath)) {
+        vscode.window.showInformationMessage("No questions yet. Agents will ask when they need clarification.");
+        return;
+      }
+
+      const lines = require("fs").readFileSync(questionsPath, "utf-8").trim().split("\n");
+      const questions = lines.map((l: string) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+      const openQuestions = questions.filter((q: any) => q.status === "open");
+
+      if (openQuestions.length === 0) {
+        vscode.window.showInformationMessage("All questions answered. ✅");
+        return;
+      }
+
+      // Show quick pick to answer questions
+      const items = openQuestions.map((q: any) => ({
+        label: `$(comment) ${q.agent}: ${q.question.substring(0, 100)}`,
+        description: q.id,
+        detail: q.options?.length ? `Options: ${q.options.join(", ")}` : "Free text answer",
+        question: q,
+      }));
+
+      const selected = await vscode.window.showQuickPick(items, {
+        placeHolder: `Select a question to answer (${openQuestions.length} open)`,
+        matchOnDescription: true,
+      });
+
+      if (selected) {
+        const answer = await vscode.window.showInputBox({
+          prompt: `Answer: ${selected.question.question}`,
+          placeHolder: selected.question.options?.length
+            ? `Choose: ${selected.question.options.join(" / ")}`
+            : "Type your answer...",
+        });
+        if (answer) {
+          // Call MCP answer_question
+          try {
+            await callMcp("tools/call", {
+              name: "answer_question",
+              arguments: {
+                project_path: projPath,
+                question_id: selected.question.id,
+                answer: answer,
+              },
+            });
+            vscode.window.showInformationMessage(`✅ Answered ${selected.question.id}`);
+          } catch (e: any) {
+            vscode.window.showErrorMessage(`Failed to answer: ${e.message}`);
+          }
+        }
+      }
+    }),
     vscode.commands.registerCommand("specEditor.reengineer", async () => {
       if (runActive) {
         vscode.window.showInformationMessage(
@@ -1464,13 +1592,51 @@ status: ${el.status || "draft"}
   );
 
   treeProvider = new SpecTreeProvider();
+  agentTreeProvider = new AgentTreeProvider();
+  tabbedProvider = new TabbedProvider(treeProvider, agentTreeProvider);
   treeView = vscode.window.createTreeView("specEditor.treeView", {
-    treeDataProvider: treeProvider,
+    treeDataProvider: tabbedProvider,
     dragAndDropController: new SpecDragDropController(),
     canSelectMany: true,
   });
   treeView.message = "Loading…";
   context.subscriptions.push(treeView);
+
+  // ── Chat Participant: intercept Copilot prompts ──
+  try {
+    if ((vscode as any).chat?.createChatParticipant) {
+      const cp = (vscode as any).chat.createChatParticipant(
+        "spec-editor.requirements",
+        async (request: any, _ctx: any, stream: any, _token: any) => {
+          const prompt = request.prompt;
+          if (!mcpConnected) {
+            stream.markdown("⚠️ MCP server not connected.");
+            return {};
+          }
+          try {
+            const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            const projPath = wsRoot ? (resolveProjectPath(wsRoot) || wsRoot) : "";
+            const result = await callMcp("write_element", {
+              aspect: "sources", element_type: "source",
+              title: prompt.substring(0, 80), content: prompt,
+              status: "draft", tags: ["copilot-chat", "auto-captured"],
+              project_path: projPath,
+            }) as any;
+            const elId = result?.element_id || result?.id || "SRC-???";
+            stream.markdown(`✅ Captured as **${elId}**\n\n> ${prompt.substring(0, 300)}`);
+          } catch (e: any) {
+            stream.markdown(`❌ ${e.message}`);
+          }
+          return {};
+        },
+      );
+      cp.iconPath = new vscode.ThemeIcon("book");
+      context.subscriptions.push(cp);
+      logEvent("INFO", "Chat participant registered: @spec-editor");
+    }
+  } catch (e: any) {
+    logEvent("WARN", `Chat participant not available: ${e.message}`);
+  }
 
   treeView.onDidExpandElement(
     (e: vscode.TreeViewExpansionEvent<SpecTreeItem>) => {
@@ -1546,6 +1712,21 @@ status: ${el.status || "draft"}
                     treeView.message = undefined;
                   }, 1500);
                 }, 1000);
+              } else if (eventType === "question_asked") {
+                // Agent asked a question — notify user
+                const agent = data.agent || "Agent";
+                const question = (data.question || "").substring(0, 80);
+                questionBar.text = `$(comment-discussion) ${agent} asks...`;
+                questionBar.tooltip = `${agent}: ${question}`;
+                questionBar.show();
+                vscode.window.showInformationMessage(
+                  `💬 ${agent}: ${question}...`,
+                  "View Questions",
+                ).then((choice) => {
+                  if (choice === "View Questions") {
+                    vscode.commands.executeCommand("specEditor.viewQuestions");
+                  }
+                });
               } else if (eventType === "project_switched") {
                 // Immediate full tree reload on project switch
                 logEvent(
@@ -1975,9 +2156,12 @@ async function startMcpServer(
       const wsRoot: string | undefined =
         vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 
+      // Validate lastProject — it might be stale (e.g., pointing to data/)
+      const validLastProj = lastProj && resolveProjectPath(lastProj);
+
       // Try last saved project, then scan workspace folders for methodology.yaml
       let localPath: string | undefined =
-        lastProj ?? (await findProject()) ?? undefined;
+        validLastProj ?? (await findProject()) ?? undefined;
 
       // Fallback: check workspace root directly (also try spec-editor subfolder)
       if (!localPath && wsRoot) {
@@ -2778,7 +2962,7 @@ function buildWebviewHtml(
   const mcpFallback = `(function(){var v=acquireVsCodeApi();var q={};window.addEventListener("message",function(e){var m=e.data;if(!m||m.id===undefined)return;var r=q[m.id];if(!r)return;delete q[m.id];if(m.result)r.resolve(m.result.result||m.result);else if(m.error)r.reject(new Error(m.error.message));else r.resolve({})});window.__vscode_mcp=function(m,p){return new Promise(function(res,rej){var id="mcp-"+Date.now()+"-"+Math.random().toString(36).slice(2,8);q[id]={resolve:res,reject:rej};v.postMessage({type:"mcp",body:{jsonrpc:"2.0",id:1,method:m,params:p||{}},id:id});setTimeout(function(){if(q[id]){delete q[id];rej(new Error("MCP timeout"))}},30000)})}})();`;
 
   html = html.replace("</head>",
-    `<script>var WINDOW_ZOOM_SENSITIVITY=${zoomCfg.get("zoomSensitivity",1)};var DIAGRAM_ENGINE=${JSON.stringify(zoomCfg.get("diagramEngine","template"))};var INITIAL_ELEMENT=${JSON.stringify(elementId||null)};var FILTER_ASPECT=${JSON.stringify(filterAspect||null)};var FILTER_RELATION=${JSON.stringify(filterRelation||null)};var __SPEC_EDITOR_PROJECT_PATH__=${JSON.stringify(projectPath)};var __SPEC_EDITOR_MCP_PORT__=8088;</script><script src="${bridgeUri}"></script><script>if(!window.__vscode_mcp){${mcpFallback}}</script></head>`);
+    `<script>var WINDOW_ZOOM_SENSITIVITY=${zoomCfg.get("zoomSensitivity",1)};var DIAGRAM_ENGINE=${JSON.stringify(zoomCfg.get("diagramEngine","template"))};var INITIAL_ELEMENT=${JSON.stringify(elementId||null)};var FILTER_ASPECT=null;var FILTER_RELATION=null;var __SPEC_EDITOR_PROJECT_PATH__=${JSON.stringify(projectPath)};var __SPEC_EDITOR_MCP_PORT__=8088;</script><script src="${bridgeUri}"></script><script>if(!window.__vscode_mcp){${mcpFallback}}</script></head>`);
 
   return html;
 }
@@ -2866,6 +3050,22 @@ async function findProject(): Promise<string | undefined> {
     vscode.workspace.workspaceFolders;
   if (folders) {
     for (const folder of folders) {
+      // First: check root directly (fast path)
+      const rootPattern: vscode.RelativePattern = new vscode.RelativePattern(
+        folder,
+        "methodology.yaml",
+      );
+      const rootFiles: vscode.Uri[] = await vscode.workspace.findFiles(
+        rootPattern,
+        null,
+        1,
+      );
+      if (rootFiles.length > 0) {
+        const resolved = resolveProjectPath(path.dirname(rootFiles[0].fsPath));
+        if (resolved) return resolved;
+      }
+
+      // Second: search recursively (for spec-editor/ subfolder projects)
       const pattern: vscode.RelativePattern = new vscode.RelativePattern(
         folder,
         "**/methodology.yaml",
@@ -2873,10 +3073,14 @@ async function findProject(): Promise<string | undefined> {
       const files: vscode.Uri[] = await vscode.workspace.findFiles(
         pattern,
         null,
-        1,
+        10,
       );
-      if (files.length > 0) {
-        return path.dirname(files[0].fsPath);
+      for (const file of files) {
+        const dir = path.dirname(file.fsPath);
+        // Skip if it's a template inside data/methodologies/ etc.
+        if (dir.endsWith("/data") || dir.endsWith("/methodologies")) continue;
+        const resolved = resolveProjectPath(dir);
+        if (resolved) return resolved;
       }
     }
   }
@@ -3092,9 +3296,10 @@ class SpecDragDropController implements vscode.TreeDragAndDropController<SpecTre
       if (ext === ".md" || ext === ".txt") {
         content = require("fs").readFileSync(fp, "utf-8").slice(0, 5000);
       } else if (ext === ".pdf" || ext === ".html" || ext === ".htm") {
-        // Convert via MCP tool (uses SourcePreprocessor from ingestion pipeline)
+        // Convert via MCP system tool (uses SourcePreprocessor from ingestion pipeline)
         try {
-          const converted: string = await callMcp("convert_source_file", {
+          const converted: string = await callMcp("spec_editor_system", {
+            command: "convert_source_file",
             file_path: fp,
           });
           const parsed: any = JSON.parse(converted);
@@ -3406,20 +3611,10 @@ class SpecTreeProvider implements vscode.TreeDataProvider<SpecTreeItem> {
       const aspects: Map<string, any[]> = new Map();
       for (const el of this.elements) {
         const a: string = el.aspect || "unknown";
-        // Apply relation filter at element level
-        if (filterRelation && el.relationships) {
-          if (!el.relationships[filterRelation]) continue;
-        } else if (filterRelation && !el.relationships) {
-          continue;
-        }
         if (!aspects.has(a)) aspects.set(a, []);
         aspects.get(a)!.push(el);
       }
-      let entries = [...aspects.entries()];
-      // Apply aspect filter
-      if (filterAspect) {
-        entries = entries.filter(([a]) => a === filterAspect);
-      }
+      const entries = [...aspects.entries()];
       return entries
         .sort(([a], [b]) => {
           const ai = this._aspectOrder.indexOf(a);
@@ -3568,4 +3763,517 @@ class SpecTreeItem extends vscode.TreeItem {
       }
     }
   }
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Agents tree (tab 2): teams → agents → Chat/Incoming/Outgoing/Settings
+// ──────────────────────────────────────────────────────────────────
+
+type AgentItemKind = "team" | "agent" | "action" | "task";
+
+class AgentTreeItem extends vscode.TreeItem {
+  kind: AgentItemKind;
+  agentKey: string = "";
+  taskId: string = "";
+  action: string = "";
+
+  constructor(
+    label: string,
+    kind: AgentItemKind,
+    collapsible: vscode.TreeItemCollapsibleState,
+    extra?: { agentKey?: string; taskId?: string; action?: string; paused?: boolean },
+  ) {
+    super(label, collapsible);
+    this.kind = kind;
+    this.agentKey = extra?.agentKey || "";
+    this.taskId = extra?.taskId || "";
+    this.action = extra?.action || "";
+
+    if (kind === "team") {
+      this.contextValue = "team";
+      this.iconPath = new vscode.ThemeIcon("organization");
+    } else if (kind === "agent") {
+      // 2-state Play/Pause via contextValue + inline menu
+      this.contextValue = extra?.paused ? "agentPaused" : "agentRunning";
+      this.iconPath = new vscode.ThemeIcon("person");
+      this.description = extra?.paused ? "paused" : "";
+    } else if (kind === "action") {
+      this.contextValue = "agentAction";
+      const icons: Record<string, string> = {
+        chat: "comment-discussion",
+        incoming: "inbox",
+        outgoing: "outbox",
+        settings: "settings-gear",
+      };
+      this.iconPath = new vscode.ThemeIcon(icons[this.action] || "ellipsis");
+      if (this.action === "chat") {
+        this.command = {
+          command: "specEditor.openAgentChat",
+          title: "Chat",
+          arguments: [this.agentKey],
+        };
+      } else if (this.action === "settings") {
+        this.command = {
+          command: "specEditor.openAgentSettings",
+          title: "Settings",
+          arguments: [this.agentKey],
+        };
+      }
+    } else if (kind === "task") {
+      this.contextValue = extra?.paused ? "taskPaused" : "taskRunning";
+      this.iconPath = new vscode.ThemeIcon("checklist");
+    }
+  }
+}
+
+class AgentTreeProvider implements vscode.TreeDataProvider<AgentTreeItem> {
+  _onDidChangeTreeData = new vscode.EventEmitter<AgentTreeItem | undefined | void>();
+  onDidChangeTreeData = this._onDidChangeTreeData.event;
+
+  teams: any[] = [];
+  tasks: any[] = [];
+  outgoing: any[] = [];
+  // Local pause state cache (agent key / task id → paused)
+  pausedAgents: Set<string> = new Set();
+  pausedTasks: Set<string> = new Set();
+
+  async load(): Promise<void> {
+    try {
+      const result: string = await callMcp("spec_editor_system", {
+        command: "list_teams",
+      });
+      const data: any = JSON.parse(result);
+      this.teams = data.teams || [];
+      this._onDidChangeTreeData.fire(undefined);
+      logEvent("INFO", `agentTree: loaded ${this.teams.length} teams`);
+    } catch (e: any) {
+      this.teams = [];
+      this._onDidChangeTreeData.fire(undefined);
+      logEvent("WARN", `agentTree load failed: ${e?.message || e}`);
+    }
+  }
+
+  async loadTasks(): Promise<void> {
+    try {
+      const result: string = await callMcp("spec_editor_system", {
+        command: "list_tasks",
+        project_path: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || "",
+      });
+      const data: any = JSON.parse(result);
+      this.tasks = data.tasks?.incoming || [];
+      this.outgoing = data.tasks?.outgoing || [];
+    } catch {
+      this.tasks = [];
+      this.outgoing = [];
+    }
+  }
+
+  getTreeItem(element: AgentTreeItem): vscode.TreeItem {
+    return element;
+  }
+
+  getParent(_element: AgentTreeItem): vscode.ProviderResult<AgentTreeItem> {
+    // Parent resolution not required for the agents tree (flat hierarchy
+    // is driven by getChildren nesting). Returning undefined is sufficient.
+    return undefined;
+  }
+
+  async getChildren(element?: AgentTreeItem): Promise<AgentTreeItem[]> {
+    if (!element) {
+      if (this.teams.length === 0) {
+        await this.load();
+      }
+      if (this.teams.length === 0) {
+        return [
+          new AgentTreeItem(
+            "No agents — MCP not connected",
+            "team",
+            vscode.TreeItemCollapsibleState.None,
+          ),
+        ];
+      }
+      return this.teams.map(
+        (t: any) =>
+          new AgentTreeItem(
+            `${t.name} (${(t.agents || []).length})`,
+            "team",
+            vscode.TreeItemCollapsibleState.Collapsed,
+          ),
+      );
+    }
+
+    if (element.kind === "team") {
+      const team = this.teams.find(
+        (t: any) => element.label && String(element.label).startsWith(t.name),
+      );
+      const agents = team?.agents || [];
+      return agents.map(
+        (a: any) =>
+          new AgentTreeItem(
+            `${a.name} (${a.role})`,
+            "agent",
+            vscode.TreeItemCollapsibleState.Collapsed,
+            { agentKey: a.key, paused: this.pausedAgents.has(a.key) },
+          ),
+      );
+    }
+
+    if (element.kind === "agent") {
+      const key = element.agentKey;
+      return [
+        new AgentTreeItem("Chat", "action", vscode.TreeItemCollapsibleState.None, { agentKey: key, action: "chat" }),
+        new AgentTreeItem("Incoming", "action", vscode.TreeItemCollapsibleState.Collapsed, { agentKey: key, action: "incoming" }),
+        new AgentTreeItem("Outgoing", "action", vscode.TreeItemCollapsibleState.Collapsed, { agentKey: key, action: "outgoing" }),
+        new AgentTreeItem("Settings", "action", vscode.TreeItemCollapsibleState.None, { agentKey: key, action: "settings" }),
+      ];
+    }
+
+    if (element.kind === "action" && element.action === "incoming") {
+      await this.loadTasks();
+      return this.tasks.map(
+        (t: any) =>
+          new AgentTreeItem(
+            `${t.task_id} — ${t.payload}`,
+            "task",
+            vscode.TreeItemCollapsibleState.None,
+            { taskId: t.task_id, paused: this.pausedTasks.has(t.task_id) },
+          ),
+      );
+    }
+
+    if (element.kind === "action" && element.action === "outgoing") {
+      await this.loadTasks();
+      const done = this.outgoing.slice(0, 100);
+      if (done.length === 0) {
+        return [
+          new AgentTreeItem(
+            "No completed tasks",
+            "task",
+            vscode.TreeItemCollapsibleState.None,
+          ),
+        ];
+      }
+      return done.map(
+        (t: any) =>
+          new AgentTreeItem(
+            `${t.task_id} [${t.status}] — ${t.result || ""}`,
+            "task",
+            vscode.TreeItemCollapsibleState.None,
+            { taskId: t.task_id },
+          ),
+      );
+    }
+
+    return [];
+  }
+
+  refresh(): void {
+    this._onDidChangeTreeData.fire(undefined);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Tabbed provider — delegates between Reqs (elements) and Agents trees
+// ──────────────────────────────────────────────────────────────────
+
+class TabbedProvider implements vscode.TreeDataProvider<SpecTreeItem | AgentTreeItem> {
+  _onDidChangeTreeData = new vscode.EventEmitter<SpecTreeItem | AgentTreeItem | undefined | void>();
+  onDidChangeTreeData = this._onDidChangeTreeData.event;
+
+  constructor(
+    private spec: SpecTreeProvider,
+    private agents: AgentTreeProvider,
+  ) {
+    // Re-fire the active sub-provider's events through our own emitter
+    this.spec.onDidChangeTreeData(() => {
+      if (currentTab === "reqs") this._onDidChangeTreeData.fire(undefined);
+    });
+    this.agents.onDidChangeTreeData(() => {
+      if (currentTab === "agents") this._onDidChangeTreeData.fire(undefined);
+    });
+  }
+
+  private get current(): SpecTreeProvider | AgentTreeProvider {
+    return currentTab === "agents" ? this.agents : this.spec;
+  }
+
+  getTreeItem(element: any): vscode.TreeItem {
+    return this.current.getTreeItem(element);
+  }
+
+  getParent(element: any): vscode.ProviderResult<any> {
+    return this.current.getParent(element);
+  }
+
+  getChildren(element?: any): vscode.ProviderResult<any[]> {
+    return this.current.getChildren(element);
+  }
+
+  refresh(): void {
+    this._onDidChangeTreeData.fire(undefined);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Tab switching + agent actions
+// ──────────────────────────────────────────────────────────────────
+
+function switchTab(tab: "reqs" | "agents"): void {
+  currentTab = tab;
+  vscode.commands.executeCommand("setContext", "specEditor.tab", tab);
+  if (tab === "agents") {
+    agentTreeProvider.load();
+  }
+  tabbedProvider.refresh();
+  logEvent("INFO", `switchTab: ${tab}`);
+}
+
+async function toggleAgentPaused(agentKey: string): Promise<void> {
+  const isPaused = agentTreeProvider.pausedAgents.has(agentKey);
+  try {
+    const result: string = await callMcp("spec_editor_system", {
+      command: "set_agent_paused",
+      agent: agentKey,
+      paused: !isPaused,
+      project_path: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || "",
+    });
+    logEvent("INFO", `toggleAgentPaused: ${agentKey} → ${!isPaused} (${result.slice(0, 80)})`);
+  } catch (e: any) {
+    logEvent("WARN", `toggleAgentPaused failed: ${e?.message || e}`);
+  }
+  if (!isPaused) {
+    agentTreeProvider.pausedAgents.add(agentKey);
+  } else {
+    agentTreeProvider.pausedAgents.delete(agentKey);
+  }
+  agentTreeProvider.refresh();
+}
+
+async function toggleTaskPaused(taskId: string): Promise<void> {
+  const isPaused = agentTreeProvider.pausedTasks.has(taskId);
+  try {
+    await callMcp("spec_editor_system", {
+      command: "set_task_paused",
+      task_id: taskId,
+      paused: !isPaused,
+      project_path: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || "",
+    });
+  } catch {
+    // ignore — pause state still reflected locally
+  }
+  if (!isPaused) {
+    agentTreeProvider.pausedTasks.add(taskId);
+  } else {
+    agentTreeProvider.pausedTasks.delete(taskId);
+  }
+  agentTreeProvider.refresh();
+}
+
+async function getAgentDetails(agentKey: string): Promise<any | undefined> {
+  try {
+    const result: string = await callMcp("spec_editor_system", {
+      command: "get_agent",
+      agent: agentKey,
+      project_path: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || "",
+    });
+    const data: any = JSON.parse(result);
+    return data.agent;
+  } catch {
+    return undefined;
+  }
+}
+
+function openAgentChat(agentKey: string): void {
+  const details = agentTreeProvider.teams
+    .flatMap((t: any) => t.agents || [])
+    .find((a: any) => a.key === agentKey);
+  const title = details?.name || agentKey;
+  const panel: vscode.WebviewPanel = vscode.window.createWebviewPanel(
+    "specEditorAgentChat",
+    `Chat: ${title}`,
+    vscode.ViewColumn.Beside,
+    { enableScripts: true, retainContextWhenHidden: true },
+  );
+
+  panel.webview.html = agentChatHtml(agentKey, title);
+
+  panel.webview.onDidReceiveMessage(async (message: any) => {
+    if (message.type === "send") {
+      const text: string = message.text || "";
+      if (!text.trim()) return;
+      panel.webview.postMessage({ type: "user", text });
+      try {
+        const result: string = await callMcp("spec_editor_system", {
+          command: "chat",
+          agent: agentKey,
+          message: text,
+          history: message.history || [],
+          project_path: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || "",
+        });
+        const data: any = JSON.parse(result);
+        const reply = data.reply || data.message || JSON.stringify(data);
+        panel.webview.postMessage({ type: "assistant", text: reply });
+      } catch (e: any) {
+        panel.webview.postMessage({
+          type: "assistant",
+          text: `❌ Error: ${e?.message || e}`,
+        });
+      }
+    }
+    if (message.type === "loadQuestions") {
+      try {
+        const result: string = await callMcp("spec_editor_system", {
+          command: "list_questions",
+          project_path: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || "",
+        });
+        const data: any = JSON.parse(result);
+        panel.webview.postMessage({
+          type: "questions",
+          questions: data.questions || [],
+        });
+      } catch {
+        panel.webview.postMessage({ type: "questions", questions: [] });
+      }
+    }
+  });
+}
+
+function openAgentSettings(agentKey: string): void {
+  const panel: vscode.WebviewPanel = vscode.window.createWebviewPanel(
+    "specEditorAgentSettings",
+    `Settings: ${agentKey}`,
+    vscode.ViewColumn.Beside,
+    { enableScripts: true, retainContextWhenHidden: true },
+  );
+
+  panel.webview.html = agentSettingsHtml(agentKey);
+
+  // Load details and push to webview
+  (async () => {
+    const details = await getAgentDetails(agentKey);
+    panel.webview.postMessage({ type: "details", agent: details });
+  })();
+}
+
+function agentChatHtml(agentKey: string, title: string): string {
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 12px; }
+  #messages { height: calc(100vh - 120px); overflow-y: auto; margin-bottom: 8px; }
+  .msg { margin: 6px 0; padding: 8px 10px; border-radius: 6px; white-space: pre-wrap; }
+  .user { background: var(--vscode-button-background); color: var(--vscode-button-foreground); margin-left: 40px; }
+  .assistant { background: var(--vscode-editor-background); border: 1px solid var(--vscode-panel-border); }
+  .questions { background: var(--vscode-editorWidget-background); border: 1px dashed var(--vscode-panel-border); }
+  .questions button { margin: 3px; }
+  #input { display: flex; gap: 6px; }
+  #input textarea { flex: 1; height: 48px; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); border-radius: 4px; padding: 6px; }
+  button { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 4px; padding: 6px 12px; cursor: pointer; }
+</style></head>
+<body>
+  <h3>${title}</h3>
+  <div id="messages"></div>
+  <div id="input">
+    <textarea id="msg" placeholder="Ask ${title}… (or 'What questions and suggestions do you have?')"></textarea>
+    <button id="send">Send</button>
+  </div>
+  <script>
+    const vscode = acquireVsCodeApi();
+    const history = [];
+    const messagesEl = document.getElementById('messages');
+
+    function addMsg(cls, text) {
+      const div = document.createElement('div');
+      div.className = 'msg ' + cls;
+      div.textContent = text;
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function renderQuestions(qs) {
+      if (!qs || qs.length === 0) return;
+      const div = document.createElement('div');
+      div.className = 'msg questions';
+      div.innerHTML = '<b>Open questions:</b>';
+      qs.forEach(q => {
+        const b = document.createElement('button');
+        b.textContent = 'Q: ' + q.question.substring(0, 60);
+        b.onclick = () => {
+          document.getElementById('msg').value = 'Answer question ' + q.id + ': ' + q.question;
+        };
+        div.appendChild(b);
+      });
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    document.getElementById('send').onclick = () => {
+      const text = document.getElementById('msg').value.trim();
+      if (!text) return;
+      addMsg('user', text);
+      history.push({ role: 'user', content: text });
+      document.getElementById('msg').value = '';
+      vscode.postMessage({ type: 'send', text, history });
+    };
+    document.getElementById('msg').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        document.getElementById('send').click();
+      }
+    });
+
+    vscode.postMessage({ type: 'loadQuestions' });
+
+    window.addEventListener('message', (e) => {
+      const m = e.data;
+      if (m.type === 'user') addMsg('user', m.text);
+      if (m.type === 'assistant') { addMsg('assistant', m.text); history.push({ role: 'assistant', content: m.text }); }
+      if (m.type === 'questions') renderQuestions(m.questions);
+    });
+  </script>
+</body></html>`;
+}
+
+function agentSettingsHtml(agentKey: string): string {
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 16px; }
+  h2, h3 { margin-bottom: 6px; }
+  .section { margin-bottom: 18px; }
+  .chip { display: inline-block; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); border-radius: 10px; padding: 2px 8px; margin: 2px; font-size: 12px; }
+  pre { background: var(--vscode-editor-background); border: 1px solid var(--vscode-panel-border); padding: 10px; border-radius: 6px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { border: 1px solid var(--vscode-panel-border); padding: 4px 8px; text-align: left; }
+</style></head>
+<body>
+  <h2 id="title">${agentKey}</h2>
+  <div id="content">Loading…</div>
+  <script>
+    const vscode = acquireVsCodeApi();
+    window.addEventListener('message', (e) => {
+      const m = e.data;
+      if (m.type !== 'details' || !m.agent) return;
+      const a = m.agent;
+      document.getElementById('title').textContent = a.name + ' (' + a.role + ') — ' + (a.team_name || a.team);
+      let html = '';
+      html += '<div class="section"><h3>Skills</h3>' +
+        (a.skills && a.skills.length
+          ? a.skills.map(s => '<span class="chip">' + s.name + (s.loaded ? '' : ' (not loaded)') + '</span>').join('')
+          : '<i>none</i>') + '</div>';
+      html += '<div class="section"><h3>Aspects</h3>' +
+        (a.aspects || []).map(x => '<span class="chip">' + x + '</span>').join('') + '</div>';
+      html += '<div class="section"><h3>System Prompt</h3><pre>' +
+        (a.system_prompt || '(empty)') + '</pre></div>';
+      const s = a.stats || {};
+      html += '<div class="section"><h3>Statistics</h3><table>' +
+        '<tr><th>Tasks done</th><td>' + (s.tasks_done || 0) + '</td></tr>' +
+        '<tr><th>LLM calls</th><td>' + (s.llm_calls || 0) + '</td></tr>' +
+        '<tr><th>Tokens in</th><td>' + (s.tokens_in || 0) + '</td></tr>' +
+        '<tr><th>Tokens out</th><td>' + (s.tokens_out || 0) + '</td></tr>' +
+        '</table></div>';
+      document.getElementById('content').innerHTML = html;
+    });
+  </script>
+</body></html>`;
 }

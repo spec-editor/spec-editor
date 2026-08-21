@@ -55,6 +55,13 @@ aspects:
     target_aspects:
     - modules
     cardinality: many-to-many
+  - name: builds
+    title: Модуль собирает артефакт
+    source_aspects:
+    - modules
+    target_aspects:
+    - implementation
+    cardinality: many-to-many
 - name: user_scenarios
   title: Пользовательские сценарии
   description: 'Иерархия сценариев: цели пользователя на верхнем уровне, детальные
@@ -261,6 +268,21 @@ aspects:
     - name: framework
       type: string
       title: Фреймворк
+  - name: build_artifact
+    title: Артефакт сборки
+    attributes:
+    - name: build_command
+      type: string
+      title: Как собрать (например make build-core, npm run package)
+    - name: output
+      type: string
+      title: Получаемый артефакт (например *.whl, *.vsix, Docker-образ)
+    - name: tool
+      type: string
+      title: Инструмент сборки (docker, twine, vsce, npm, pip)
+    - name: inputs
+      type: string
+      title: Входные файлы/директории (например src/, packages/vscode-extension/)
   relationship_types:
   - name: implements
     title: Реализует

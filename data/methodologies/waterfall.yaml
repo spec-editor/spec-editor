@@ -65,6 +65,13 @@ aspects:
         target_aspects:
           - modules
         cardinality: many-to-many
+      - name: builds
+        title: Module builds artifact
+        source_aspects:
+          - modules
+        target_aspects:
+          - implementation
+        cardinality: many-to-many
   - name: user_scenarios
     title: User Scenarios
     description:
@@ -284,6 +291,21 @@ aspects:
           - name: framework
             type: string
             title: Framework (pytest, jest, ...)
+      - name: build_artifact
+        title: Build Artifact
+        attributes:
+          - name: build_command
+            type: string
+            title: How to build (e.g. make build-core, npm run package)
+          - name: output
+            type: string
+            title: Produced artifact (e.g. *.whl, *.vsix, Docker image)
+          - name: tool
+            type: string
+            title: Build tool (docker, twine, vsce, npm, pip)
+          - name: inputs
+            type: string
+            title: Input files/dirs (e.g. src/, packages/vscode-extension/)
     relationship_types:
       - name: implements
         title: Implements requirement

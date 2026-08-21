@@ -648,19 +648,6 @@ CODE_RO_TOOLS: list[ToolDef] = [
         ),
     ),
     ToolDef(
-        name="convert_source_file",
-        description="[Ingestion] Convert a file (PDF, HTML) to Markdown text. Returns the extracted content.",
-        parameters=_params(
-            {
-                "file_path": {
-                    "type": "string",
-                    "description": "Absolute path to the file",
-                }
-            },
-            ["file_path"],
-        ),
-    ),
-    ToolDef(
         name="search_code",
         description="[Code] Grep for TEXT PATTERNS in source files (regex, strings, comments). For finding CLASS/FUNCTION/METHOD definitions by name, prefer search_symbol instead — it returns structured symbol data (name, kind, file, line, docstring).",
         parameters=_params(
@@ -813,7 +800,6 @@ def add_code_tools_handlers(
             "read_source_document": lambda filename=None: read_source_document(
                 sd, filename
             ),
-            "convert_source_file": lambda file_path: convert_source_file(file_path),
             "verify_implements": lambda code_dir="", file_path="": (
                 verify_implements_tool(storage, code_dir or sd, file_path)
             ),

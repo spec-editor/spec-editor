@@ -59,7 +59,7 @@ data = ["**/*"]
 src = ["codegen/templates/*.j2"]
 
 [tool.setuptools.data-files]
-"share/spec-editor" = ["packages/vscode-extension/spec-editor-vscode-0.1.0.vsix"]
+"share/spec-editor" = ["packages/vscode-extension/spec-editor-vscode-0.2.1.vsix"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

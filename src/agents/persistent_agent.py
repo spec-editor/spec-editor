@@ -410,7 +410,7 @@ class AgentWorker(Agent):
     _VALID_REL_TYPES: set[str] = {
         "consists_of", "depends_on", "refines", "next_step",
         "interacts_with", "navigates_to", "references", "applies_to",
-        "implements", "implemented_by", "tested_by",
+        "implements", "implemented_by", "tested_by", "builds",
         "measures", "contains", "triggers_on",
     }
 

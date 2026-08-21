@@ -180,6 +180,8 @@ tasks/
 # ──────────────────────────────────────────────────────────────
 fix_coverage.py
 run_codegen.py
+scripts/publish.sh
+docs/GUMROAD_PRODUCT_DESCRIPTION.md
 
 # ──────────────────────────────────────────────────────────────
 # VS Code extension test binaries (huge — 2+ GB)
@@ -199,6 +201,7 @@ packages/frontend/node_modules/
 # ──────────────────────────────────────────────────────────────
 packages/vscode-extension/node_modules/
 packages/vscode-extension/out/
+*.vsix
 
 # ──────────────────────────────────────────────────────────────
 # Rust / Zed extension build output
