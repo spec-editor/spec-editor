@@ -2,6 +2,22 @@
 
 All notable changes to Spec Editor will be documented in this file.
 
+## [0.2.2] — 2026-09-01
+
+### Added
+
+- Agents tree in VS Code extension: Reqs/Agents tabs, team → agent → Chat/Incoming/Outgoing/Settings hierarchy, chat and settings webviews, Play/Pause toggles
+- Consolidated `spec_editor_system` MCP tool (teams, agents, tasks, questions, chat, pause toggles)
+- `build_artifact` element type + `builds` relationship in methodology, reengineer Phase 2, and devops skill
+- Semantic code search via fastembed (ONNX, no external service), with non-blocking first-time indexing and background incremental re-indexing on code change
+- Auto-capture of Copilot chat with cwd filtering and full preprocessing pipeline (spam filter + fact extraction + dedup)
+
+### Fixed
+
+- Semantic search silently returning empty results when embedding model was missing
+- tree-sitter `Parser is unsendable` cross-thread crash in background indexing (subprocess isolation + thread-local parser cache)
+- Nested `asyncio.run` in capture_requirement (spam filter/fact extraction never ran)
+
 ## [0.2.0] — 2026-07-04
 
 ### Added
