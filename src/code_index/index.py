@@ -57,6 +57,10 @@ class EmbeddingIndex:
             self._model = TextEmbedding(model_name=_EMBED_MODEL)
         return self._model
 
+    def is_ready(self) -> bool:
+        """True if both chunks and embeddings exist on disk (index searchable)."""
+        return self._chunks_path.exists() and self._embeddings_path.exists()
+
     # ── Build ────────────────────────────────────────────────────
 
     def build(self, force: bool = False) -> int:

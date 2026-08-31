@@ -3,6 +3,10 @@
 Registers with the MCP server to provide AI agents with codebase
 understanding beyond exact symbol name matching.
 
+First-time indexing runs in the background: the tool waits up to 1 second,
+and if the index isn't ready yet, returns ``status="indexing"`` so the
+caller can retry shortly (instead of blocking for tens of seconds).
+
 Usage via MCP:
     search_semantic(query="payment processing", top_k=10)
     search_semantic(query="error handling middleware")
@@ -10,9 +14,18 @@ Usage via MCP:
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 from src.code_index.index import EmbeddingIndex
+
+# Background index builds, keyed by project path.
+# First call starts a thread and returns "indexing" after a 1s grace period.
+_BUILDS: dict[str, dict] = {}
+_BUILDS_LOCK = threading.Lock()
+
+# How long to wait for a first-time index before reporting "indexing".
+_INDEX_WAIT_SECONDS = 1.0
 
 
 def search_semantic_tool(
@@ -27,35 +40,91 @@ def search_semantic_tool(
         project_path: Path to spec-editor project directory.
         query: Natural language search query.
         top_k: Number of results to return (default 10, max 50).
-        rebuild: Force rebuild the index before searching.
+        rebuild: Force rebuild the index before searching (synchronous).
 
     Returns:
-        dict with "results" list and "chunks_total" count.
+        dict with "status" ("ok" | "indexing" | "error"), "results", and
+        "chunks_total" (when ready).
     """
     if not query or not query.strip():
-        return {"error": "query is required", "results": []}
+        return {"status": "error", "error": "query is required", "results": []}
 
     pp = Path(project_path)
     if not pp.is_dir():
-        return {"error": f"Project directory not found: {project_path}", "results": []}
+        return {
+            "status": "error",
+            "error": f"Project directory not found: {project_path}",
+            "results": [],
+        }
 
     top_k = min(max(1, top_k), 50)
 
     try:
         index = EmbeddingIndex(pp)
 
-        if rebuild or not index._chunks_path.exists():
-            index.build(force=rebuild)
+        if rebuild:
+            # Explicit rebuild — synchronous (caller opted into the wait).
+            index.build(force=True)
+        elif not index.is_ready():
+            ready = _ensure_index_ready(index, pp)
+            if not ready:
+                return {
+                    "status": "indexing",
+                    "query": query,
+                    "results": [],
+                    "message": (
+                        "Semantic index is being built (first-time indexing). "
+                        "This typically takes 10-60 seconds. Retry the query shortly."
+                    ),
+                }
 
         results = index.search(query, top_k=top_k, min_score=0.15)
 
         return {
+            "status": "ok",
             "query": query,
             "results": results,
-            "chunks_total": len(index._chunks) if index._chunks_path.exists() else 0,
+            "chunks_total": len(index._chunks),
         }
     except Exception as e:
-        return {"error": str(e), "results": []}
+        return {"status": "error", "error": str(e), "results": []}
+
+
+def _ensure_index_ready(index: EmbeddingIndex, pp: Path) -> bool:
+    """Start a background index build if needed and wait up to 1 second.
+
+    Returns True if the index became ready within the grace period,
+    False if indexing is still in progress.
+    """
+    key = str(pp)
+
+    with _BUILDS_LOCK:
+        entry = _BUILDS.get(key)
+        # Start a new build only if none is running AND the index is not ready.
+        if entry is None or entry["thread"].is_alive() is False:
+            if not index.is_ready():
+                state: dict = {"done": False, "chunks": 0}
+
+                def _run() -> None:
+                    try:
+                        state["chunks"] = index.build(force=False)
+                    except Exception:
+                        pass
+                    finally:
+                        state["done"] = True
+
+                t = threading.Thread(target=_run, daemon=True)
+                t.start()
+                entry = {"thread": t, "state": state}
+                _BUILDS[key] = entry
+
+        if entry is None:
+            return index.is_ready()
+        thread = entry["thread"]
+
+    # Wait up to 1s for the build to finish.
+    thread.join(timeout=_INDEX_WAIT_SECONDS)
+    return index.is_ready()
 
 
 def search_semantic_schema() -> dict:

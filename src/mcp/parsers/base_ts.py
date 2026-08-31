@@ -7,6 +7,7 @@ Supports tree-sitter 0.23+ and 0.25+ (all attributes are methods in 0.25).
 """
 
 import re
+import threading
 from pathlib import Path
 
 import tree_sitter_language_pack as tsl
@@ -65,13 +66,21 @@ def _root_node(tree):
     return rn() if callable(rn) else rn
 
 
-_parser_cache: dict[str, object] = {}
+# tree-sitter Parser objects are NOT thread-safe: they must be created,
+# used, and garbage-collected on the SAME thread. A module-level cache
+# shared across threads causes "Parser is unsendable" RuntimeErrors
+# (e.g. background index builds). Use a thread-local cache instead.
+_parser_cache = threading.local()
 
 
 def get_ts_parser(language: str):
-    if language not in _parser_cache:
-        _parser_cache[language] = tsl.get_parser(language)
-    return _parser_cache[language]
+    cache = getattr(_parser_cache, "parsers", None)
+    if cache is None:
+        cache = {}
+        _parser_cache.parsers = cache
+    if language not in cache:
+        cache[language] = tsl.get_parser(language)
+    return cache[language]
 
 
 def extract_ids_from_text(text: str) -> list[str]:
