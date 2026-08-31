@@ -29,15 +29,21 @@ _BUILDS_LOCK = threading.Lock()
 _INDEX_WAIT_SECONDS = 1.0
 
 
-def _build_index_process(project_path: str, force: bool) -> None:
+def _build_index_process(project_path: str, mode: str) -> None:
     """Build the semantic index in a CHILD PROCESS (top-level, picklable).
 
     tree-sitter Parser objects are thread-confined — they cannot be created,
     used, or dropped across threads (cross-thread use raises PanicException,
     cross-thread drop raises "Parser is unsendable"). Running the build in a
     separate process keeps all parsers on the child's main thread.
+
+    mode: "full" — complete rebuild; "incremental" — re-index only changed files.
     """
-    EmbeddingIndex(Path(project_path)).build(force=force)
+    idx = EmbeddingIndex(Path(project_path))
+    if mode == "incremental" and idx.is_ready():
+        idx.rebuild_incremental()
+    else:
+        idx.build(force=(mode == "full"))
 
 
 def search_semantic_tool(
@@ -83,7 +89,7 @@ def search_semantic_tool(
 
         if not index.is_ready():
             # First-time indexing — background subprocess + grace period.
-            entry = _start_background_build(pp, force=False)
+            entry = _start_background_build(pp, mode="full")
             entry["process"].join(timeout=_INDEX_WAIT_SECONDS)
             if not EmbeddingIndex(pp).is_ready():
                 return {
@@ -98,9 +104,9 @@ def search_semantic_tool(
             index = EmbeddingIndex(pp)  # reload freshly-built index
 
         elif index.is_stale():
-            # Source changed since last build — refresh in the background
-            # while serving results from the current (stale) index.
-            _start_background_build(pp, force=True)
+            # Source changed since last build — incremental refresh in the
+            # background while serving results from the current index.
+            _start_background_build(pp, mode="incremental")
 
         return _search(index, query, top_k)
     except Exception as e:
@@ -118,7 +124,7 @@ def _search(index: EmbeddingIndex, query: str, top_k: int) -> dict:
     }
 
 
-def _start_background_build(pp: Path, force: bool) -> dict:
+def _start_background_build(pp: Path, mode: str) -> dict:
     """Start (or reuse) a background index build in a subprocess.
 
     The build runs in a separate process so tree-sitter parsers are created,
@@ -131,7 +137,7 @@ def _start_background_build(pp: Path, force: bool) -> dict:
         if entry is None or not entry["process"].is_alive():
             proc = multiprocessing.Process(
                 target=_build_index_process,
-                args=(str(pp), force),
+                args=(str(pp), mode),
                 daemon=True,
             )
             proc.start()

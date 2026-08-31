@@ -23,6 +23,35 @@ class CodeChunk:
     line: int           # start line number
 
 
+# File extension → language mapping (single source of truth for chunking).
+_EXT_TO_LANG: dict[str, str] = {
+    ".py": "python",
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".js": "javascript",
+    ".jsx": "javascript",
+    ".go": "go",
+    ".java": "java",
+    ".rs": "rust",
+}
+
+
+def language_for_ext(ext: str) -> str | None:
+    """Return the tree-sitter language for a file extension, or None."""
+    return _EXT_TO_LANG.get(ext)
+
+
+def chunk_file(file_path: Path, project_root: Path) -> list[CodeChunk]:
+    """Extract code symbols from a single source file (language auto-detected)."""
+    lang = _EXT_TO_LANG.get(file_path.suffix)
+    if lang is None:
+        return []
+    try:
+        return _chunk_file(file_path, lang, project_root)
+    except Exception:
+        return []  # skip unparsable files silently
+
+
 def chunk_project(project_path: Path) -> list[CodeChunk]:
     """Extract all code symbols from a project directory.
 
@@ -31,25 +60,17 @@ def chunk_project(project_path: Path) -> list[CodeChunk]:
     """
     chunks: list[CodeChunk] = []
 
-    # Language → file extensions mapping
-    lang_map = {
-        "python": {".py"},
-        "typescript": {".ts", ".tsx"},
-        "javascript": {".js", ".jsx"},
-        "go": {".go"},
-        "java": {".java"},
-        "rust": {".rs"},
-    }
+    # Group extensions by language for stable iteration order.
+    lang_exts: dict[str, set[str]] = {}
+    for ext, lang in _EXT_TO_LANG.items():
+        lang_exts.setdefault(lang, set()).add(ext)
 
-    for lang, extensions in sorted(lang_map.items()):
-        for ext in extensions:
+    for lang in sorted(lang_exts):
+        for ext in sorted(lang_exts[lang]):
             for file_path in sorted(project_path.rglob(f"*{ext}")):
                 if _should_skip(file_path, project_path):
                     continue
-                try:
-                    chunks.extend(_chunk_file(file_path, lang, project_path))
-                except Exception:
-                    pass  # skip unparsable files silently
+                chunks.extend(chunk_file(file_path, project_path))
 
     return chunks
 

@@ -140,6 +140,104 @@ class EmbeddingIndex:
         )
         return len(self._chunks)
 
+    # ── Incremental rebuild ──────────────────────────────────────
+
+    def rebuild_incremental(self) -> int:
+        """Re-chunk and re-embed only files changed since the last build.
+
+        Keeps embeddings for unchanged files (no re-embedding), re-chunks and
+        re-embeds only files whose mtime is newer than the index build time,
+        and drops chunks for deleted files. Falls back to a full build when
+        the index is missing or inconsistent.
+        """
+        if not self.is_ready():
+            return self.build(force=True)
+
+        self._load()
+        if self._embeddings is None or not self._chunks:
+            return self.build(force=True)
+
+        try:
+            index_mtime = self._chunks_path.stat().st_mtime
+        except OSError:
+            return self.build(force=True)
+
+        # ── Walk source files: detect changed + build current path set ──
+        import os
+
+        changed_files: list[Path] = []
+        current_paths: set[str] = set()
+        exts = tuple(_SOURCE_EXTS)
+        for dirpath, dirnames, filenames in os.walk(self._root):
+            dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
+            for name in filenames:
+                if not name.endswith(exts):
+                    continue
+                fp = Path(dirpath) / name
+                current_paths.add(str(fp.relative_to(self._root)))
+                try:
+                    if fp.stat().st_mtime > index_mtime:
+                        changed_files.append(fp)
+                except OSError:
+                    continue
+
+        old_paths = {c["rel_path"] for c in self._chunks}
+        removed_paths = old_paths - current_paths
+        changed_paths = {str(f.relative_to(self._root)) for f in changed_files}
+
+        if not changed_paths and not removed_paths:
+            return len(self._chunks)  # nothing changed
+
+        # ── Re-chunk only the changed files ──
+        from src.code_index.chunker import chunk_file
+
+        new_chunks: list[dict[str, Any]] = []
+        for fp in changed_files:
+            new_chunks.extend(asdict(c) for c in chunk_file(fp, self._root))
+
+        drop = changed_paths | removed_paths
+
+        # ── Keep unchanged chunks + their existing embeddings ──
+        keep_indices = [
+            i for i, c in enumerate(self._chunks) if c["rel_path"] not in drop
+        ]
+        kept_chunks = [self._chunks[i] for i in keep_indices]
+        kept_embeddings = (
+            self._embeddings[keep_indices]
+            if keep_indices
+            else np.zeros((0, _EMBED_DIM), dtype=np.float32)
+        )
+
+        # ── Embed only the new chunks ──
+        new_embeddings = (
+            self._embed_batch([_embed_text(c) for c in new_chunks])
+            if new_chunks
+            else np.zeros((0, _EMBED_DIM), dtype=np.float32)
+        )
+
+        self._chunks = kept_chunks + new_chunks
+        self._embeddings = (
+            np.vstack([kept_embeddings, new_embeddings])
+            if (kept_chunks or new_chunks)
+            else None
+        )
+
+        # ── Save ──
+        self._chunks_path.write_text(
+            json.dumps(self._chunks, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        if self._embeddings is not None:
+            np.save(str(self._embeddings_path), self._embeddings)
+
+        logger.info(
+            "semantic_index_incremental",
+            kept=len(kept_chunks),
+            reindexed=len(new_chunks),
+            removed=len(removed_paths),
+        )
+        return len(self._chunks)
+
     # ── Search ───────────────────────────────────────────────────
 
     def search(
