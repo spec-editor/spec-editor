@@ -14,3 +14,4 @@ markdown>=3.5
 tree-sitter>=0.21,<0.22
 tree-sitter-languages==1.9.1
 numpy>=2.0
+fastembed>=0.4

@@ -1,9 +1,10 @@
 """Embedding-based semantic code search.
 
-Uses Ollama's embedding API (all-MiniLM-L6-v2: 384-dim, ~80 MB, free).
-Storage: JSON chunks + NumPy .npy embeddings in $PROJECT/.spec-editor/
+Uses fastembed (ONNX Runtime) for embeddings — a pure pip dependency,
+no external service required. The model (all-MiniLM-L6-v2, 384-dim)
+is downloaded on first use and cached locally.
 
-No graph DB or external service required — just NumPy + Ollama.
+Storage: JSON chunks + NumPy .npy embeddings in $PROJECT/.spec-editor/
 """
 
 from __future__ import annotations
@@ -12,7 +13,6 @@ from dataclasses import asdict
 import json
 import logging
 import time
-import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -22,10 +22,9 @@ from src.code_index.chunker import CodeChunk, chunk_project
 
 logger = logging.getLogger(__name__)
 
-# Ollama embedding model — small, fast, English-optimised
-_EMBED_MODEL = "all-minilm:l6-v2"
+# Embedding model — small, fast, English-optimised (384-dim)
+_EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 _EMBED_DIM = 384
-_EMBED_BATCH = 50  # chunks per Ollama call
 
 
 class EmbeddingIndex:
@@ -46,6 +45,17 @@ class EmbeddingIndex:
         self._embeddings_path = self._dir / "embeddings.npy"
         self._chunks: list[dict[str, Any]] = []
         self._embeddings: np.ndarray | None = None
+        self._model = None
+
+    # ── Embedding model (lazy, fastembed) ─────────────────────────
+
+    def _get_model(self):
+        """Lazy-load the fastembed embedding model (downloads on first use)."""
+        if self._model is None:
+            from fastembed import TextEmbedding
+
+            self._model = TextEmbedding(model_name=_EMBED_MODEL)
+        return self._model
 
     # ── Build ────────────────────────────────────────────────────
 
@@ -75,16 +85,10 @@ class EmbeddingIndex:
             encoding="utf-8",
         )
 
-        # Batch embed via Ollama (may fail if Ollama not running)
-        try:
-            embeddings = self._embed_batch(texts)
-            np.save(str(self._embeddings_path), embeddings)
-            self._embeddings = embeddings
-        except Exception:
-            # Embedding may fail if Ollama is not running or model not pulled.
-            # Chunks are saved — search will work once Ollama is available.
-            pass
-            # Chunks saved, embeddings unavailable — run `ollama pull all-minilm:l6-v2` and rebuild
+        # Embed via fastembed (raises on failure — surface the error)
+        embeddings = self._embed_batch(texts)
+        np.save(str(self._embeddings_path), embeddings)
+        self._embeddings = embeddings
 
         elapsed = time.monotonic() - start
         logger.info(
@@ -104,6 +108,10 @@ class EmbeddingIndex:
             self.build()
         if self._embeddings is None:
             self._load()
+        if self._embeddings is None and self._chunks:
+            # Chunks exist but embeddings are missing (partial/inconsistent
+            # index) — rebuild to restore embeddings.
+            self.build(force=True)
         if self._embeddings is None or len(self._chunks) == 0:
             return []
 
@@ -147,35 +155,20 @@ class EmbeddingIndex:
         return self._embed_batch([text])[0]
 
     def _embed_batch(self, texts: list[str]) -> np.ndarray:
-        """Call Ollama embedding API, batch by _EMBED_BATCH."""
-        all_vectors: list[np.ndarray] = []
-        for i in range(0, len(texts), _EMBED_BATCH):
-            batch = texts[i : i + _EMBED_BATCH]
-            vectors = self._ollama_embed(batch)
-            all_vectors.extend(vectors)
-        return np.array(all_vectors, dtype=np.float32)
-
-    @staticmethod
-    def _ollama_embed(texts: list[str]) -> list[np.ndarray]:
-        """Call Ollama /api/embed endpoint."""
-        url = "http://127.0.0.1:11434/api/embed"
-        data = json.dumps({"model": _EMBED_MODEL, "input": texts}).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=data,
-            headers={"Content-Type": "application/json"},
-        )
+        """Embed a batch of texts via fastembed."""
         try:
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
-        except Exception as e:
+            model = self._get_model()
+            vectors = list(model.embed(texts))
+        except ImportError as exc:
             raise RuntimeError(
-                f"Ollama embedding failed. Is '{_EMBED_MODEL}' pulled? "
-                f"Run: ollama pull {_EMBED_MODEL}\nError: {e}"
-            ) from e
-
-        embeddings = result.get("embeddings", [])
-        return [np.array(emb, dtype=np.float32) for emb in embeddings]
+                "fastembed is not installed. Run: pip install fastembed"
+            ) from exc
+        except Exception as exc:
+            raise RuntimeError(
+                f"Embedding failed (model '{_EMBED_MODEL}'): {exc}. "
+                f"First use downloads the model — check network access."
+            ) from exc
+        return np.array(vectors, dtype=np.float32)
 
 
 def _embed_text(chunk: dict[str, Any]) -> str:

@@ -68,8 +68,10 @@ def search_semantic_schema() -> dict:
             "Unlike search_symbol (exact name match), this finds code by meaning "
             "(e.g., 'payment processing' finds process_payment even if the word "
             "'payment' isn't in the function name). "
-            "Uses local embedding model (all-MiniLM-L6-v2) via Ollama. "
-            "First call builds the index (~1-10 sec for medium projects)."
+            "Uses a local ONNX embedding model (all-MiniLM-L6-v2) via fastembed — "
+            "no external service required. First call builds the index and "
+            "downloads the model (typically 10-60 sec for medium projects); "
+            "subsequent queries are milliseconds."
         ),
         "inputSchema": {
             "type": "object",
