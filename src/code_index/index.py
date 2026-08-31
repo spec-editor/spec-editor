@@ -26,6 +26,14 @@ logger = logging.getLogger(__name__)
 _EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 _EMBED_DIM = 384
 
+# Source extensions and dirs used for staleness detection (mirrors chunker).
+_SOURCE_EXTS = {".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".java", ".rs"}
+_SKIP_DIRS = {
+    "node_modules", ".git", "__pycache__", ".venv", "venv",
+    "dist", "build", ".next", "out", "target", ".spec-editor",
+    "test-results", "dry_run_output", ".vscode-test",
+}
+
 
 class EmbeddingIndex:
     """Build and search a semantic code index.
@@ -60,6 +68,36 @@ class EmbeddingIndex:
     def is_ready(self) -> bool:
         """True if both chunks and embeddings exist on disk (index searchable)."""
         return self._chunks_path.exists() and self._embeddings_path.exists()
+
+    def is_stale(self) -> bool:
+        """True if any source file changed since the index was built.
+
+        Compares the index build time (chunks.json mtime) against the
+        newest source file mtime. Uses os.walk with directory pruning so
+        .venv/node_modules/.git are skipped entirely (huge speedup vs rglob).
+        """
+        if not self.is_ready():
+            return False
+        try:
+            index_mtime = self._chunks_path.stat().st_mtime
+        except OSError:
+            return False
+
+        import os
+
+        exts = tuple(_SOURCE_EXTS)
+        for dirpath, dirnames, filenames in os.walk(self._root):
+            # Prune non-source directories entirely — don't walk them.
+            dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
+            for name in filenames:
+                if not name.endswith(exts):
+                    continue
+                try:
+                    if os.path.getmtime(os.path.join(dirpath, name)) > index_mtime:
+                        return True
+                except OSError:
+                    continue
+        return False
 
     # ── Build ────────────────────────────────────────────────────
 

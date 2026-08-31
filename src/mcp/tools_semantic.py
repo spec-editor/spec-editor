@@ -14,18 +14,30 @@ Usage via MCP:
 
 from __future__ import annotations
 
+import multiprocessing
 import threading
 from pathlib import Path
 
 from src.code_index.index import EmbeddingIndex
 
 # Background index builds, keyed by project path.
-# First call starts a thread and returns "indexing" after a 1s grace period.
+# First call starts a subprocess and returns "indexing" after a 1s grace period.
 _BUILDS: dict[str, dict] = {}
 _BUILDS_LOCK = threading.Lock()
 
 # How long to wait for a first-time index before reporting "indexing".
 _INDEX_WAIT_SECONDS = 1.0
+
+
+def _build_index_process(project_path: str, force: bool) -> None:
+    """Build the semantic index in a CHILD PROCESS (top-level, picklable).
+
+    tree-sitter Parser objects are thread-confined — they cannot be created,
+    used, or dropped across threads (cross-thread use raises PanicException,
+    cross-thread drop raises "Parser is unsendable"). Running the build in a
+    separate process keeps all parsers on the child's main thread.
+    """
+    EmbeddingIndex(Path(project_path)).build(force=force)
 
 
 def search_semantic_tool(
@@ -44,7 +56,9 @@ def search_semantic_tool(
 
     Returns:
         dict with "status" ("ok" | "indexing" | "error"), "results", and
-        "chunks_total" (when ready).
+        "chunks_total" (when ready). If the index is stale (source changed),
+        a background refresh is started and results are served from the
+        current (slightly outdated) index.
     """
     if not query or not query.strip():
         return {"status": "error", "error": "query is required", "results": []}
@@ -65,9 +79,13 @@ def search_semantic_tool(
         if rebuild:
             # Explicit rebuild — synchronous (caller opted into the wait).
             index.build(force=True)
-        elif not index.is_ready():
-            ready = _ensure_index_ready(index, pp)
-            if not ready:
+            return _search(index, query, top_k)
+
+        if not index.is_ready():
+            # First-time indexing — background subprocess + grace period.
+            entry = _start_background_build(pp, force=False)
+            entry["process"].join(timeout=_INDEX_WAIT_SECONDS)
+            if not EmbeddingIndex(pp).is_ready():
                 return {
                     "status": "indexing",
                     "query": query,
@@ -77,54 +95,50 @@ def search_semantic_tool(
                         "This typically takes 10-60 seconds. Retry the query shortly."
                     ),
                 }
+            index = EmbeddingIndex(pp)  # reload freshly-built index
 
-        results = index.search(query, top_k=top_k, min_score=0.15)
+        elif index.is_stale():
+            # Source changed since last build — refresh in the background
+            # while serving results from the current (stale) index.
+            _start_background_build(pp, force=True)
 
-        return {
-            "status": "ok",
-            "query": query,
-            "results": results,
-            "chunks_total": len(index._chunks),
-        }
+        return _search(index, query, top_k)
     except Exception as e:
         return {"status": "error", "error": str(e), "results": []}
 
 
-def _ensure_index_ready(index: EmbeddingIndex, pp: Path) -> bool:
-    """Start a background index build if needed and wait up to 1 second.
+def _search(index: EmbeddingIndex, query: str, top_k: int) -> dict:
+    """Run the search and format the 'ok' response."""
+    results = index.search(query, top_k=top_k, min_score=0.15)
+    return {
+        "status": "ok",
+        "query": query,
+        "results": results,
+        "chunks_total": len(index._chunks),
+    }
 
-    Returns True if the index became ready within the grace period,
-    False if indexing is still in progress.
+
+def _start_background_build(pp: Path, force: bool) -> dict:
+    """Start (or reuse) a background index build in a subprocess.
+
+    The build runs in a separate process so tree-sitter parsers are created,
+    used, and dropped on a single thread (the child's main thread).
     """
     key = str(pp)
 
     with _BUILDS_LOCK:
         entry = _BUILDS.get(key)
-        # Start a new build only if none is running AND the index is not ready.
-        if entry is None or entry["thread"].is_alive() is False:
-            if not index.is_ready():
-                state: dict = {"done": False, "chunks": 0}
+        if entry is None or not entry["process"].is_alive():
+            proc = multiprocessing.Process(
+                target=_build_index_process,
+                args=(str(pp), force),
+                daemon=True,
+            )
+            proc.start()
+            entry = {"process": proc}
+            _BUILDS[key] = entry
 
-                def _run() -> None:
-                    try:
-                        state["chunks"] = index.build(force=False)
-                    except Exception:
-                        pass
-                    finally:
-                        state["done"] = True
-
-                t = threading.Thread(target=_run, daemon=True)
-                t.start()
-                entry = {"thread": t, "state": state}
-                _BUILDS[key] = entry
-
-        if entry is None:
-            return index.is_ready()
-        thread = entry["thread"]
-
-    # Wait up to 1s for the build to finish.
-    thread.join(timeout=_INDEX_WAIT_SECONDS)
-    return index.is_ready()
+    return entry
 
 
 def search_semantic_schema() -> dict:

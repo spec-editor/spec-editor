@@ -83,6 +83,20 @@ def get_ts_parser(language: str):
     return cache[language]
 
 
+def clear_parsers() -> None:
+    """Drop all thread-local parsers on the CURRENT thread.
+
+    tree-sitter Parser objects must be dropped on the same thread that
+    created them (their ``__del__`` raises ``RuntimeError: Parser is
+    unsendable`` otherwise). Worker threads that used ``get_ts_parser``
+    must call this before exiting, so GC never runs the destructor on a
+    different thread.
+    """
+    cache = getattr(_parser_cache, "parsers", None)
+    if cache is not None:
+        cache.clear()
+
+
 def extract_ids_from_text(text: str) -> list[str]:
     return [m.group(1) for m in _IMPLEMENTS_RE.finditer(text)]
 
