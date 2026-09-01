@@ -21,6 +21,34 @@ logger = get_logger(__name__)
 _REQUEST_TIMEOUT = 90
 
 
+def _safe_json_loads(text: str | None) -> dict[str, Any]:
+    """Parse tool-call arguments JSON, tolerating truncation/malformation.
+
+    DeepSeek V4 Pro (thinking mode) occasionally emits tool calls whose
+    ``arguments`` field is malformed JSON (truncated mid-string, or with
+    stray text around the object). Instead of crashing the whole agent run
+    with a JSONDecodeError, recover a JSON object or fall back to ``{}``.
+    """
+    if not text:
+        return {}
+    try:
+        data = json.loads(text)
+        return data if isinstance(data, dict) else {}
+    except json.JSONDecodeError:
+        pass
+    # Best effort: extract the outer JSON object (first "{" to last "}").
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        try:
+            data = json.loads(text[start : end + 1])
+            return data if isinstance(data, dict) else {}
+        except json.JSONDecodeError:
+            pass
+    logger.warning("tool_call_json_parse_failed", arguments=text[:200])
+    return {}
+
+
 class LiteLLMProvider(LLMProvider):
     """LLM provider via LiteLLM — unified interface to 100+ models.
 
@@ -242,10 +270,8 @@ class LiteLLMProvider(LLMProvider):
                 ToolCall(
                     id=tc.get("id", ""),
                     name=tc.get("function", {}).get("name", ""),
-                    arguments=(
-                        json.loads(tc.get("function", {}).get("arguments", "{}"))
-                        if tc.get("function", {}).get("arguments")
-                        else {}
+                    arguments=_safe_json_loads(
+                        tc.get("function", {}).get("arguments")
                     ),
                 )
                 for tc in message["tool_calls"]
@@ -343,11 +369,7 @@ class LiteLLMProvider(LLMProvider):
                 ToolCall(
                     id=tc.id,
                     name=tc.function.name,
-                    arguments=(
-                        json.loads(tc.function.arguments)
-                        if tc.function.arguments
-                        else {}
-                    ),
+                    arguments=_safe_json_loads(tc.function.arguments),
                 )
                 for tc in message.tool_calls
             ]
