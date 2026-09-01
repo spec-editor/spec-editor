@@ -117,6 +117,17 @@ class AgentWorker(Agent):
                             "path": {"type": "string", "description": "Subdirectory to search (default: project root)"}
                         }, "required": ["pattern"]
                     }),
+                    ToolDef(name="search_symbol", description="Find CLASS/FUNCTION/METHOD DEFINITIONS by name via AST parsers. Better than grep for locating where a symbol is defined.", parameters={
+                        "type": "object", "properties": {
+                            "query": {"type": "string", "description": "Symbol name to search for"}
+                        }, "required": ["query"]
+                    }),
+                    ToolDef(name="search_semantic", description="Semantic (natural language) code search. Find code by MEANING even when the symbol name doesn't match the query. First call may return status='indexing' — retry shortly.", parameters={
+                        "type": "object", "properties": {
+                            "query": {"type": "string", "description": "Natural language description of what to find"},
+                            "top_k": {"type": "integer", "description": "Number of results (default 10)"}
+                        }, "required": ["query"]
+                    }),
                     ToolDef(name="add_relationship", description="Add a relationship between elements", parameters={
                         "type": "object", "properties": {
                             "source_id": {"type": "string"},
@@ -146,6 +157,8 @@ class AgentWorker(Agent):
                 tool_handlers.update({
                     "get_file_tree": self._tool_get_file_tree,
                     "search_code": self._tool_search_code,
+                    "search_symbol": self._tool_search_symbol,
+                    "search_semantic": self._tool_search_semantic,
                     "add_relationship": self._tool_add_relationship,
                     "search_elements": self._tool_search_elements,
                     "list_aspect": self._tool_list_aspect,
@@ -405,6 +418,29 @@ class AgentWorker(Agent):
             return {"pattern": pattern, "matches": len(lines), "lines": lines}
         except Exception as exc:
             return {"pattern": pattern, "error": str(exc), "lines": []}
+
+    async def _tool_search_symbol(self, query: str) -> dict:
+        """Tool: AST-based symbol lookup (find definitions by name)."""
+        from src.agents.tools_code import search_symbol_tool
+
+        self._log.info("reengineer_search_symbol", query=query)
+        print(f"  [progress] search_symbol('{query[:50]}')")
+        return await search_symbol_tool(str(self._project_path), query)
+
+    async def _tool_search_semantic(
+        self, query: str, top_k: int = 10, rebuild: bool = False
+    ) -> dict:
+        """Tool: semantic (meaning-based) code search via embeddings."""
+        from src.mcp.tools_semantic import search_semantic_tool
+
+        self._log.info("reengineer_search_semantic", query=query)
+        print(f"  [progress] search_semantic('{query[:50]}')")
+        return search_semantic_tool(
+            project_path=str(self._project_path),
+            query=query,
+            top_k=top_k,
+            rebuild=rebuild,
+        )
 
     # ── Valid relationship types (from methodology.yaml) ──
     _VALID_REL_TYPES: set[str] = {

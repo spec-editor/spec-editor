@@ -108,11 +108,15 @@ skills:
 
       Start with get_file_tree to understand the structure. Then work
       phase by phase. For each phase:
-      1. search_code for relevant patterns
-      2. read_file for important files
-      3. search_elements to check for duplicates
-      4. write_element to create new elements
-      5. add_relationship to link elements
+      1. get_file_tree to survey the structure
+      2. search_code for relevant patterns (grep)
+      3. search_symbol to find where a class/function/method is DEFINED (AST, exact name)
+      4. search_semantic to find code by MEANING (e.g. "payment processing")
+         — note: the first call may return status="indexing"; retry shortly
+      5. read_file for important files
+      6. search_elements to check for duplicates
+      7. write_element to create new elements
+      8. add_relationship to link elements
 
       ## OUTPUT
 

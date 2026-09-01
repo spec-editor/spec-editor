@@ -1037,6 +1037,19 @@ def run(
                         "file_path": {"type": "string", "description": "Relative path from project root"}
                     }, "required": ["file_path"]
                 }))
+            if "search_symbol" not in existing_names:
+                tools1.append(ToolDef(name="search_symbol", description="Find CLASS/FUNCTION/METHOD DEFINITIONS by name via AST parsers. Better than grep for locating where a symbol is defined.", parameters={
+                    "type": "object", "properties": {
+                        "query": {"type": "string", "description": "Symbol name to search for"}
+                    }, "required": ["query"]
+                }))
+            if "search_semantic" not in existing_names:
+                tools1.append(ToolDef(name="search_semantic", description="Semantic (natural language) code search. Find code by MEANING even when the symbol name doesn't match the query. First call may return status='indexing' — retry shortly.", parameters={
+                    "type": "object", "properties": {
+                        "query": {"type": "string", "description": "Natural language description of what to find"},
+                        "top_k": {"type": "integer", "description": "Number of results (default 10)"}
+                    }, "required": ["query"]
+                }))
 
         handlers1 = build_all_handlers(
             storage, method, str(project_path / "source"), ci_threshold=ci or 0.7
@@ -1055,6 +1068,10 @@ def run(
                 handlers1["search_code"] = _code_worker._tool_search_code
             if "read_file" not in handlers1:
                 handlers1["read_file"] = _code_worker._tool_read_file
+            # Override semantic + symbol search handlers to scan the CODE
+            # directory (reengineer_code_dir), not the spec-editor source/ dir.
+            handlers1["search_symbol"] = _code_worker._tool_search_symbol
+            handlers1["search_semantic"] = _code_worker._tool_search_semantic
             # Remove source-document handler
             handlers1.pop("read_source_document", None)
 
